@@ -30,8 +30,8 @@ Push, open PRs and merge as 0x1f320, with a token from that account. Squash and 
 ## Branches
 
 - **`dev`** is the default branch.
-  - All work lands here through pull requests.
-  - The `dev` ruleset requires a PR and allows only **squash merge**.
+  - All work lands here through pull requests, merged with **squash merge**.
+  - The `dev` ruleset requires a PR and allows squash merge and merge commits. Merge commits are reserved for the release workflow's back-merge of `main` (see [Releases](#releases)); never merge a feature PR with one.
 - **`main`** receives `dev` only through a pull request from `dev`.
   - The `main` ruleset requires a PR and allows only **create a merge commit**.
   - Before the first such PR, `main` holds only `chore: initial commit`.
@@ -75,12 +75,29 @@ git push --force-with-lease origin <branch>
 | --- | --- |
 | `swift build` | Debug build |
 | `scripts/test.sh` | Swift Testing suite; works with only the Command Line Tools installed |
-| `scripts/build-app.sh [release\|debug]` | Builds and ad-hoc signs `build/TossBar.app` |
+| `scripts/build-app.sh [release\|debug]` | Builds and ad-hoc signs `build/TossBar.app`; `TOSSBAR_SIGN_IDENTITY` signs with a real identity instead |
+| `scripts/release.sh package <version>` | Builds, signs, notarizes and zips a release; run by semantic-release in CI |
 | `TOSSBAR_DIAG=1 build/TossBar.app/Contents/MacOS/TossBar` | Prints each menu bar item's state and API errors every 3 s |
 
 - **CI:** `.github/workflows/ci.yml` runs on every PR and on pushes to `dev` and `main`. It builds, runs the tests, builds the release bundle, and uploads it as an artifact.
+- **Release tooling:** `package.json` holds only semantic-release and its plugins, pinned to exact versions. The app itself never depends on Node.
 - **Before opening a PR:** run `swift build` and `scripts/test.sh` locally.
 - **Tests:** add them for logic that can be tested without the UI or network: decoding, formatting, conversion and profit math, and backward-compatible config decoding.
+
+## Releases
+
+`.github/workflows/release.yml` runs semantic-release (`.releaserc.json`) on every push to `dev` and `main`.
+
+- **Versions come from commits:** `feat` bumps the minor version, `fix` and `perf` the patch, and a breaking change the major. Other types don't release. This is why PR titles must follow Conventional Commits.
+- **`dev` publishes prereleases** such as `v1.2.0-dev.1`, marked as pre-release on GitHub.
+- **`main` publishes releases** such as `v1.2.0`.
+- **Nothing is committed back:** the version lives only in the tag. `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, and `CFBundleVersion` gets the workflow run number.
+- **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
+- **Back-merge:** a release tag on `main` sits on a merge commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
+- **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8_BASE64`. A missing secret fails the release before any tag is created.
+  - The `.p12` must use legacy encryption (`openssl pkcs12 -export -legacy`), because `security import` rejects OpenSSL 3's default algorithms.
+  - The App Store Connect API key needs only the Developer role.
+- **Repository setting:** "Allow GitHub Actions to create and approve pull requests" must stay on for the back-merge.
 
 ## Design invariants
 
