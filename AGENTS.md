@@ -95,6 +95,8 @@ git push --force-with-lease origin <branch>
 - **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
 - **Back-merge:** a release tag on `main` sits on a merge commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
 - **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8_BASE64`. A missing secret fails the release before any tag is created.
+  - The `.p12` must use legacy encryption (`openssl pkcs12 -export -legacy`), because `security import` rejects OpenSSL 3's default algorithms.
+  - The App Store Connect API key needs only the Developer role.
 - **Repository setting:** "Allow GitHub Actions to create and approve pull requests" must stay on for the back-merge.
 
 ## Design invariants
