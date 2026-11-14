@@ -1,0 +1,24 @@
+{
+  "branches": [
+    "main",
+    { "name": "dev", "prerelease": "dev" }
+  ],
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/exec", {
+      "verifyConditionsCmd": "scripts/release.sh verify",
+      "prepareCmd": "scripts/release.sh package ${nextRelease.version}",
+      "successCmd": "scripts/release.sh published ${nextRelease.version}"
+    }],
+    ["@semantic-release/github", {
+      "assets": [
+        { "path": "build/release/TossBar-*.zip" }
+      ],
+      "successComment": false,
+      "failComment": false,
+      "releasedLabels": false
+    }]
+  ]
+}

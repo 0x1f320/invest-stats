@@ -34,6 +34,13 @@ Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager
 - Swift 5.10 or later. The Command Line Tools are enough; Xcode is not required.
 - A Toss Securities OpenAPI client, with this Mac's public IP on its allow list
 
+## Install
+
+Download `TossBar-<version>.zip` from [Releases](https://github.com/0x1f320/tossinvest-stats/releases), unzip it, and move `TossBar.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning.
+
+- **Releases** such as `v1.2.0` are built from `main`.
+- **Pre-releases** such as `v1.2.0-dev.1` are built from `dev` and carry changes that haven't reached a release yet.
+
 ## Build and run
 
 ```bash
