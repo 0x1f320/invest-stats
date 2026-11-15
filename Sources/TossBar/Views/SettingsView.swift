@@ -200,6 +200,12 @@ struct GeneralSettingsView: View {
                 Text("상승 초록 · 하락 빨강 (해외식)").tag(false)
             }
 
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("장이 닫힌 항목 흐리게 표시", isOn: $settings.dimClosedMarkets)
+                Text("항목이 따르는 시장이 모두 닫혀 있으면 메뉴바 텍스트를 흐리게 표시합니다. 프리마켓·애프터마켓·데이마켓은 열린 것으로 봅니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Toggle("로그인 시 자동 실행", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, newValue in
                     do {

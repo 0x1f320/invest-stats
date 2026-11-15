@@ -180,6 +180,14 @@ final class MarketDataService: ObservableObject {
         }
     }
 
+    /// Whether every market one item follows is closed, by the same rules: anything
+    /// unknown counts as open.
+    func isClosed(_ item: MenuItemConfig, at date: Date = Date()) -> Bool {
+        PollingPolicy.isIdle(itemRegions: [regions(for: item)]) { region in
+            calendars[region]?.status(at: date)
+        }
+    }
+
     /// The markets an item's numbers move with, or nil until that is known.
     func regions(for item: MenuItemConfig) -> Set<MarketRegion>? {
         switch item.kind {
@@ -419,6 +427,8 @@ final class MarketDataHub: ObservableObject {
     private var loopTask: Task<Void, Never>?
     /// When each connection's last refresh started.
     private var lastRefresh: [UUID: Date] = [:]
+    /// Whether each connection's markets were all closed at the last tick.
+    private var lastIdle: [UUID: Bool] = [:]
 
     init(connections: ConnectionStore, store: ItemStore, settings: AppSettings) {
         self.connections = connections
@@ -475,14 +485,17 @@ final class MarketDataHub: ObservableObject {
     /// Refreshes the connections that are due, as the polling loop does.
     private func refreshDue() async {
         let now = Date()
+        var marketsChanged = false
         let due = services.values.filter { service in
-            !items(for: service.connectionID).isEmpty && PollingPolicy.isDue(
-                lastRefresh: lastRefresh[service.connectionID],
-                now: now,
-                interval: interval,
-                idle: service.isIdle(at: now)
-            )
+            let id = service.connectionID
+            guard !items(for: id).isEmpty else { return false }
+            let idle = service.isIdle(at: now)
+            if lastIdle.updateValue(idle, forKey: id) != idle { marketsChanged = true }
+            return PollingPolicy.isDue(lastRefresh: lastRefresh[id], now: now, interval: interval, idle: idle)
         }
+        // A market that just closed doesn't call for a refresh, so redraw the menu bar,
+        // which dims closed markets when asked to, without one.
+        if marketsChanged { objectWillChange.send() }
         await refresh(due)
     }
 
@@ -504,6 +517,7 @@ final class MarketDataHub: ObservableObject {
             services[id] = nil
             forwarders[id] = nil
             lastRefresh[id] = nil
+            lastIdle[id] = nil
         }
         for stored in list {
             if let service = services[stored.id] {
