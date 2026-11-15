@@ -10,8 +10,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Tags, GitHub Releases and the CHANGELOG.md commit use the release GitHub App's token,
+# since only that app bypasses the dev and main rulesets. GITHUB_TOKEN merges main back into dev.
 permissions:
-  contents: write       # tags and GitHub Releases
+  contents: write
   pull-requests: write  # merging main back into dev
 
 jobs:
@@ -20,9 +22,32 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
+      - name: Create release app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # Checking out with the app token makes git push as the app, so the
+      # CHANGELOG.md commit can bypass the rulesets.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Commit as the release app
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          USER_ID="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
+          {
+            echo "GIT_AUTHOR_NAME=${SLUG}[bot]"
+            echo "GIT_AUTHOR_EMAIL=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
+            echo "GIT_COMMITTER_NAME=${SLUG}[bot]"
+            echo "GIT_COMMITTER_EMAIL=${USER_ID}+${SLUG}[bot]@users.noreply.github.com"
+          } >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -78,7 +103,7 @@ jobs:
       - name: Release
         id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: npx semantic-release

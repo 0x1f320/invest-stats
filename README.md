@@ -50,6 +50,8 @@ Download `TossBar-<version>.zip` from [Releases](https://github.com/0x1f320/toss
 - **Releases** such as `v1.2.0` are built from `main`.
 - **Pre-releases** such as `v1.2.0-dev.1` are built from `dev` and carry changes that haven't reached a release yet.
 
+Every release, pre-releases included, is listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## Build and run
 
 ```bash
