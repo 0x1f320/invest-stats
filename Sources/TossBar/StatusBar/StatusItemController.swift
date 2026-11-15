@@ -224,50 +224,130 @@ enum TitleRenderer {
         NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
     }
 
-    private static func stockTitle(_ config: StockItemConfig, data: MarketDataService) -> NSAttributedString {
+    private static func attributed(_ pieces: [TitlePiece], signedColor: NSColor) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        if config.showName {
-            var name = config.displayName?.nilIfBlank ?? data.stockInfo[config.symbol]?.name ?? config.symbol
-            if name.count > 12 { name = String(name.prefix(11)) + "…" }
-            result.append(attributed(name + " "))
-        }
-        guard let quote = data.quotes[config.symbol] else {
-            let failed = data.symbolErrors[config.symbol] != nil || (data.errorMessage != nil && !data.isRefreshing)
-            let placeholder = failed ? "⚠︎" : "…"
-            result.append(attributed(config.showName ? placeholder : "\(config.symbol) \(placeholder)"))
-            return result
-        }
-        let conversion = data.priceConversion(symbol: config.symbol, display: config.displayCurrency)
-        if conversion.isConverted {
-            // Add 원 so a converted price can't be mistaken for a domestic one.
-            result.append(attributed(Fmt.priceWithUnit(conversion.apply(quote.lastPrice.value), .krw)))
-        } else {
-            result.append(attributed(Fmt.price(quote.lastPrice.value, quote.currency)))
-        }
-        if config.showChange, let change = data.change(for: config.symbol) {
-            result.append(attributed(" " + Fmt.percent(ratio: change.rate)))
+        for piece in pieces.widenedSigned() {
+            result.append(attributed(piece.text, color: piece.isSigned ? signedColor : .white))
         }
         return result
     }
 
-    /// Format from the spec: `{profit}₩ ({rate}%)`, e.g. `+1,019,000₩ (+11.79%)`.
-    private static func assetTitle(_ config: AssetItemConfig, data: MarketDataService) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        if let label = config.label.nilIfBlank {
-            result.append(attributed(label + " "))
+    /// The text of the item settings preview: the live title when its data is loaded, with
+    /// sample values standing in for whatever isn't known yet.
+    static func preview(for config: MenuItemConfig, env: AppEnvironment) -> NSAttributedString {
+        let data = env.data.service(for: config)
+        switch config.kind {
+        case .stock(let stock):
+            let pieces = stock.titleFormat.render { token in
+                TitlePiece(data.flatMap { stockValue(token, config: stock, data: $0) } ?? token.example)
+            }
+            return attributed(pieces, signedColor: .white)
+        case .asset(let asset):
+            let summary = data.flatMap { assetSummary(asset, data: $0) }
+            let pieces = asset.titleFormat.render { token in
+                let live = summary.flatMap { assetValue(token, config: asset, summary: $0) }
+                return live ?? TitlePiece(token.example, isSigned: token.isSigned)
+            }
+            let trend = summary.map { headlineTrend(asset, summary: $0) } ?? .up
+            return attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .white)
         }
-        guard let seq = data.accountSeq(for: config), let overview = data.holdings[seq] else {
-            let fallback = config.label.nilIfBlank == nil ? "자산 " : ""
-            result.append(attributed(fallback + (data.errorMessage != nil && !data.isRefreshing ? "⚠︎" : "…")))
-            return result
+    }
+
+    // MARK: Stock items
+
+    /// The name shown for a stock: the item's display name, else the stock's name, shortened.
+    private static func stockName(_ config: StockItemConfig, data: MarketDataService) -> String {
+        var name = config.displayName?.nilIfBlank ?? data.stockInfo[config.symbol]?.name ?? config.symbol
+        if name.count > 12 { name = String(name.prefix(11)) + "…" }
+        return name
+    }
+
+    /// A stock item's value for a format token, or nil while it isn't known.
+    private static func stockValue(_ token: StockTitleToken, config: StockItemConfig, data: MarketDataService) -> String? {
+        switch token {
+        case .name:
+            return stockName(config, data: data)
+        case .symbol:
+            return config.symbol
+        case .price:
+            guard let quote = data.quotes[config.symbol] else { return nil }
+            return stockPrice(quote.lastPrice.value, quote: quote, config: config, data: data)
+        case .changeRate:
+            return data.change(for: config.symbol).map { Fmt.percent(ratio: $0.rate) }
+        case .changeAmount:
+            guard let quote = data.quotes[config.symbol], let change = data.change(for: config.symbol) else { return nil }
+            let sign = change.amount > 0 ? "+" : (change.amount < 0 ? "-" : "")
+            return sign + stockPrice(abs(change.amount), quote: quote, config: config, data: data)
         }
-        let summary = AssetSummary(overview: overview, usdKrw: data.usdKrwRate)
+    }
+
+    /// A price in the item's display currency. A converted price gets 원, so it can't be
+    /// mistaken for a domestic one.
+    private static func stockPrice(_ value: Decimal, quote: PriceQuote, config: StockItemConfig, data: MarketDataService) -> String {
+        let conversion = data.priceConversion(symbol: config.symbol, display: config.displayCurrency)
+        return conversion.isConverted
+            ? Fmt.priceWithUnit(conversion.apply(value), .krw)
+            : Fmt.price(value, quote.currency)
+    }
+
+    private static func stockTitle(_ config: StockItemConfig, data: MarketDataService) -> NSAttributedString {
+        let format = config.titleFormat
+        guard data.quotes[config.symbol] != nil else {
+            let failed = data.symbolErrors[config.symbol] != nil || (data.errorMessage != nil && !data.isRefreshing)
+            let prefix = format.uses(.name) ? stockName(config, data: data) : config.symbol
+            return attributed("\(prefix) \(failed ? "⚠︎" : "…")")
+        }
+        let pieces = format.render { TitlePiece(stockValue($0, config: config, data: data) ?? "…") }
+        return attributed(pieces, signedColor: .white)
+    }
+
+    // MARK: Asset items
+
+    private static func assetSummary(_ config: AssetItemConfig, data: MarketDataService) -> AssetSummary? {
+        guard let seq = data.accountSeq(for: config), let overview = data.holdings[seq] else { return nil }
+        return AssetSummary(overview: overview, usdKrw: data.usdKrwRate)
+    }
+
+    /// The trend of the headline profit. The rate decides while the KRW amount waits for the
+    /// USD/KRW rate.
+    private static func headlineTrend(_ config: AssetItemConfig, summary: AssetSummary) -> Trend {
         let headline = summary.headline(for: config)
-        let amountText = headline.amount.map(Fmt.krwProfit) ?? "…₩"
-        // The label stays white; the profit and rate take the trend color when enabled.
-        // The rate decides while the KRW amount waits for the USD/KRW rate.
-        let color = config.colorByTrend ? Trend(headline.amount ?? headline.rate).menuBarColor : .white
-        result.append(attributed("\(amountText) (\(Fmt.percent(ratio: headline.rate)))", color: color))
-        return result
+        return Trend(headline.amount ?? headline.rate)
+    }
+
+    /// An asset item's value for a format token, or nil while it isn't known. Amounts wait
+    /// for the USD/KRW rate when the account holds US stocks.
+    private static func assetValue(_ token: AssetTitleToken, config: AssetItemConfig, summary: AssetSummary) -> TitlePiece? {
+        let headline = summary.headline(for: config)
+        switch token {
+        case .label:
+            return TitlePiece(config.label.nilIfBlank ?? "")
+        case .profit:
+            return headline.amount.map { TitlePiece(Fmt.krwProfit($0), isSigned: true) }
+        case .rate:
+            return TitlePiece(Fmt.percent(ratio: headline.rate), isSigned: true)
+        case .marketValue:
+            let value = config.usesAfterCost ? summary.marketValueAfterCost : summary.marketValue
+            return value.map { TitlePiece(Fmt.number($0) + "₩") }
+        case .purchase:
+            return summary.purchase.map { TitlePiece(Fmt.number($0) + "₩") }
+        }
+    }
+
+    /// The item's format, `{profit}₩ ({rate}%)` by default, e.g. `+1,019,000₩ (+11.79%)`.
+    private static func assetTitle(_ config: AssetItemConfig, data: MarketDataService) -> NSAttributedString {
+        let format = config.titleFormat
+        guard let summary = assetSummary(config, data: data) else {
+            let label = format.uses(.label) ? config.label.nilIfBlank : nil
+            let placeholder = data.errorMessage != nil && !data.isRefreshing ? "⚠︎" : "…"
+            return attributed("\(label ?? "자산") \(placeholder)")
+        }
+        let pieces = format.render { token in
+            assetValue(token, config: config, summary: summary)
+                ?? TitlePiece(token.isAmount ? "…₩" : "…", isSigned: token.isSigned)
+        }
+        // Labels and other text stay white; the profit and rate take the trend color when enabled.
+        let color = config.colorByTrend ? headlineTrend(config, summary: summary).menuBarColor : .white
+        return attributed(pieces, signedColor: color)
     }
 }

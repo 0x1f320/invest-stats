@@ -123,7 +123,7 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
                     AssetProfitPane(id: id, store: env.store)
                 },
                 ToolbarTab("display", "표시", symbol: "menubar.rectangle") {
-                    AssetDisplayPane(store: env.store, id: id)
+                    AssetDisplayPane(env: env, id: id)
                 },
             ]
         }

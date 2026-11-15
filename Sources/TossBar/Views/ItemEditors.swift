@@ -224,7 +224,7 @@ struct StockAddDialog: View {
                 error = nil
             }
 
-            CaptionText("표시 이름, 등락률, 가격 통화는 추가한 뒤 열리는 항목 설정 창에서 바꿀 수 있습니다.")
+            CaptionText("표시 이름, 등락률, 가격 통화, 메뉴바 형식은 추가한 뒤 열리는 항목 설정 창에서 바꿀 수 있습니다.")
 
             if let error {
                 ErrorText(message: error)
@@ -289,7 +289,7 @@ struct AssetAddDialog: View {
             }
             .formStyle(.columns)
 
-            CaptionText("라벨, 손익 기준, 색상은 추가한 뒤 열리는 항목 설정 창에서 바꿀 수 있습니다.")
+            CaptionText("라벨, 손익 기준, 색상, 메뉴바 형식은 추가한 뒤 열리는 항목 설정 창에서 바꿀 수 있습니다.")
 
             HStack {
                 Spacer()
@@ -452,6 +452,8 @@ struct StockDisplayPane: View {
     @ObservedObject private var data: MarketDataHub
     /// Kept as typed; the store gets it trimmed, and nil when blank.
     @State private var displayName: String
+    /// Kept as typed; the store gets nil when blank.
+    @State private var format: String
 
     init(env: AppEnvironment, id: UUID) {
         self.env = env
@@ -459,6 +461,7 @@ struct StockDisplayPane: View {
         self.store = env.store
         self.data = env.data
         _displayName = State(initialValue: env.store.stockConfig(id)?.displayName ?? "")
+        _format = State(initialValue: env.store.stockConfig(id)?.format ?? "")
     }
 
     private var isUS: Bool {
@@ -466,24 +469,46 @@ struct StockDisplayPane: View {
         return StockLookup.isUS(symbol, universe: env.universe, service: data.service(for: item))
     }
 
+    private var hasCustomFormat: Bool { format.nilIfBlank != nil }
+
     var body: some View {
-        Form {
-            TextField("메뉴바 표시 이름", text: $displayName, prompt: Text("비우면 종목명 사용"))
-                .onChange(of: displayName) { _, name in
-                    store.updateStock(id) { $0.displayName = name.nilIfBlank }
+        VStack(alignment: .leading, spacing: 16) {
+            Form {
+                TextField("메뉴바 표시 이름", text: $displayName, prompt: Text("비우면 종목명 사용"))
+                    .onChange(of: displayName) { _, name in
+                        store.updateStock(id) { $0.displayName = name.nilIfBlank }
+                    }
+                Toggle("메뉴바에 이름 표시", isOn: store.stockBinding(id, \.showName, default: true))
+                    .disabled(hasCustomFormat)
+                Toggle("메뉴바에 전일 대비 등락률 표시", isOn: store.stockBinding(id, \.showChange, default: true))
+                    .disabled(hasCustomFormat)
+                if hasCustomFormat {
+                    CaptionText("사용자 지정 형식을 쓰는 동안에는 형식에 넣은 값만 표시합니다.")
                 }
-            Toggle("메뉴바에 이름 표시", isOn: store.stockBinding(id, \.showName, default: true))
-            Toggle("메뉴바에 전일 대비 등락률 표시", isOn: store.stockBinding(id, \.showChange, default: true))
-            if isUS {
-                Picker("가격 표시 통화", selection: store.stockBinding(id, \.displayCurrency, default: .native)) {
-                    ForEach(PriceDisplayCurrency.allCases) { Text($0.title).tag($0) }
+                if isUS {
+                    Picker("가격 표시 통화", selection: store.stockBinding(id, \.displayCurrency, default: .native)) {
+                        ForEach(PriceDisplayCurrency.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    CaptionText("원화는 USD/KRW 매매기준율로 환산합니다. 등락률은 달러 기준입니다.")
                 }
-                .pickerStyle(.segmented)
-                CaptionText("원화는 USD/KRW 매매기준율로 환산합니다. 등락률은 달러 기준입니다.")
+            }
+            .formStyle(.columns)
+
+            Divider()
+
+            if let item = store.item(id), let config = store.stockConfig(id) {
+                TitleFormatEditor<StockTitleToken>(
+                    format: $format,
+                    defaultFormat: config.defaultFormat,
+                    preview: TitleRenderer.preview(for: item, env: env)
+                )
             }
         }
-        .formStyle(.columns)
         .editorPane()
+        .onChange(of: format) { _, format in
+            store.updateStock(id) { $0.format = format.nilIfBlank == nil ? nil : format }
+        }
     }
 }
 
@@ -528,7 +553,7 @@ struct AssetProfitPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            CaptionText("보유 종목 기준 손익을 메뉴바에 '{수익}₩ ({수익률}%)' 형식으로 표시합니다. 해외 주식 손익은 매매기준율로 원화 환산합니다.")
+            CaptionText("보유 종목 기준 손익을 메뉴바에 '{수익}₩ ({수익률}%)' 형식으로 표시합니다. 형식은 표시 탭에서 바꿀 수 있습니다. 해외 주식 손익은 매매기준율로 원화 환산합니다.")
             Form {
                 Picker("표시 기준", selection: store.assetBinding(id, \.mode, default: .total)) {
                     ForEach(AssetMode.allCases) { Text($0.title).tag($0) }
@@ -551,26 +576,133 @@ struct AssetProfitPane: View {
 }
 
 struct AssetDisplayPane: View {
+    let env: AppEnvironment
     let id: UUID
     @ObservedObject private var store: ItemStore
+    @ObservedObject private var data: MarketDataHub
     @State private var label: String
+    /// Kept as typed; the store gets nil when blank.
+    @State private var format: String
 
-    init(store: ItemStore, id: UUID) {
+    init(env: AppEnvironment, id: UUID) {
+        self.env = env
         self.id = id
-        self.store = store
-        _label = State(initialValue: store.assetConfig(id)?.label ?? "")
+        self.store = env.store
+        self.data = env.data
+        _label = State(initialValue: env.store.assetConfig(id)?.label ?? "")
+        _format = State(initialValue: env.store.assetConfig(id)?.format ?? "")
     }
 
     var body: some View {
-        Form {
-            TextField("라벨", text: $label, prompt: Text("선택 (예: 💰, 주식)"))
-                .onChange(of: label) { _, label in
-                    store.updateAsset(id) { $0.label = label }
-                }
-            Toggle("메뉴바에 손익 색상 표시", isOn: store.assetBinding(id, \.colorByTrend, default: false))
-            CaptionText("수익은 빨강, 손실은 파랑처럼 손익 부호에 따라 색을 입힙니다. 색상 규칙은 일반 설정을 따릅니다.")
+        VStack(alignment: .leading, spacing: 16) {
+            Form {
+                TextField("라벨", text: $label, prompt: Text("선택 (예: 💰, 주식)"))
+                    .onChange(of: label) { _, label in
+                        store.updateAsset(id) { $0.label = label }
+                    }
+                Toggle("메뉴바에 손익 색상 표시", isOn: store.assetBinding(id, \.colorByTrend, default: false))
+                CaptionText("수익은 빨강, 손실은 파랑처럼 손익 부호에 따라 손익과 수익률에 색을 입힙니다. 색상 규칙은 일반 설정을 따릅니다.")
+            }
+            .formStyle(.columns)
+
+            Divider()
+
+            if let item = store.item(id), let config = store.assetConfig(id) {
+                TitleFormatEditor<AssetTitleToken>(
+                    format: $format,
+                    defaultFormat: config.defaultFormat,
+                    preview: TitleRenderer.preview(for: item, env: env)
+                )
+            }
         }
-        .formStyle(.columns)
         .editorPane()
+        .onChange(of: format) { _, format in
+            store.updateAsset(id) { $0.format = format.nilIfBlank == nil ? nil : format }
+        }
+    }
+}
+
+// MARK: - Menu bar format
+
+/// The menu bar format of an item's display pane: the format field, the tokens it can use,
+/// and a preview of the result.
+private struct TitleFormatEditor<Token: TitleToken>: View {
+    @Binding var format: String
+    let defaultFormat: String
+    let preview: NSAttributedString
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("메뉴바 형식").font(.headline)
+            HStack {
+                TextField("메뉴바 형식", text: $format, prompt: Text(defaultFormat))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+                Button("기본값", action: { format = "" })
+                    .disabled(format.isEmpty)
+            }
+            CaptionText("비워 두면 기본 형식(\(defaultFormat))을 씁니다. 코드를 누르면 형식 끝에 추가되고, %% 는 % 문자 그대로 표시됩니다.")
+
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
+                ForEach(Array(Token.allCases), id: \.self) { token in
+                    GridRow {
+                        Button(token.code, action: { append(token) })
+                            .buttonStyle(.link)
+                            .font(.body.monospaced())
+                            .help("형식 끝에 \(token.code) 추가")
+                        Text(token.title)
+                        Text(token.example)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .padding(.leading, 4)
+
+            HStack(spacing: 10) {
+                Text("미리보기").foregroundStyle(.secondary)
+                MenuBarTextPreview(text: preview)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// Adds a token at the end, after the default format when no custom format is set yet,
+    /// so adding one value keeps the others.
+    private func append(_ token: Token) {
+        let base = format.isEmpty ? defaultFormat : format
+        let separator = base.isEmpty || base.last?.isWhitespace == true ? "" : " "
+        format = base + separator + token.code
+    }
+}
+
+/// Menu bar text as it appears in the menu bar: the same font and colors on a dark strip.
+private struct MenuBarTextPreview: View {
+    let text: NSAttributedString
+
+    var body: some View {
+        AttributedLabel(text: text)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(white: 0.16)))
+    }
+}
+
+private struct AttributedLabel: NSViewRepresentable {
+    let text: NSAttributedString
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(labelWithAttributedString: text)
+        field.lineBreakMode = .byClipping
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        if !field.attributedStringValue.isEqual(to: text) {
+            field.attributedStringValue = text
+            field.invalidateIntrinsicContentSize()
+        }
     }
 }
