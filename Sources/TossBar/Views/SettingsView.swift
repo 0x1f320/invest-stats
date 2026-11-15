@@ -28,6 +28,8 @@ struct SettingsView: View {
                 .tag("update")
         }
         .frame(width: 580, height: 480)
+        .padding([.horizontal, .bottom], 20)
+        .padding(.top, 8)
     }
 }
 
@@ -532,6 +534,7 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .padding(10)
     }
 }
