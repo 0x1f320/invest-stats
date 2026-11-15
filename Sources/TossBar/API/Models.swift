@@ -103,11 +103,17 @@ struct StockListItem: Decodable, Hashable, Sendable {
 }
 
 struct ExchangeRate: Decodable, Hashable, Sendable {
+    /// The buying rate (매수 환율).
     let rate: Dec
     /// The base rate (매매기준율), used for every USD to KRW conversion in the app.
     let midRate: Dec
+    /// `rate` against `midRate`, in basis points.
+    let basisPoint: Dec?
+    /// `UP`, `EQUAL` or `DOWN`.
     let rateChangeType: String?
+    /// The window the rate is valid for, usually a minute.
     let validFrom: Date?
+    let validUntil: Date?
 }
 
 // MARK: - Account / Asset

@@ -31,6 +31,7 @@ enum TossAPIError: LocalizedError {
             case "ip-not-allowed": return "허용되지 않은 IP 입니다. 토스증권 WTS > 설정 > Open API 에서 현재 IP 를 등록하세요."
             case "token-revoked": return "다른 곳에서 같은 Client 로 토큰을 재발급해 현재 토큰이 무효화되었습니다."
             case "stock-not-found": return "종목을 찾을 수 없습니다."
+            case "unsupported-symbol": return "지원하지 않는 지표입니다."
             case "account-not-found": return "계좌를 찾을 수 없습니다."
             case "rate-limit-exceeded", "edge-rate-limit-exceeded": return "요청 한도를 초과했습니다. 잠시 후 다시 시도합니다."
             case "maintenance": return "토스증권 시스템 점검 중입니다."
@@ -49,6 +50,9 @@ enum TossAPIError: LocalizedError {
 /// Requests per second allowed for each rate limit group, from the official docs.
 enum RateGroup: Hashable {
     case auth, account, asset, stock, stockAll, marketInfo, marketData, marketDataChart
+    /// `MARKET_INDICATOR` (indicator prices) and `MARKET_INDICATOR_CHART` (indicator candles),
+    /// as each endpoint's description names them.
+    case marketIndicator, marketIndicatorChart
 
     var tps: Double {
         switch self {
@@ -60,6 +64,8 @@ enum RateGroup: Hashable {
         case .marketInfo: return 3
         case .marketData: return 15
         case .marketDataChart: return 20
+        case .marketIndicator: return 10
+        case .marketIndicatorChart: return 5
         }
     }
 }
@@ -354,6 +360,32 @@ actor TossAPIClient {
         ]
         if let before { query.append(URLQueryItem(name: "before", value: before)) }
         return try await get("/api/v1/candles", query: query, group: .marketDataChart)
+    }
+
+    /// Current values of market indicators (`MarketIndicator.catalog`), up to 200 per request.
+    func indicatorPrices(_ symbols: [String]) async throws -> [MarketIndicatorQuote] {
+        var result: [MarketIndicatorQuote] = []
+        for chunk in symbols.chunked(into: 200) {
+            let page: [MarketIndicatorQuote] = try await get(
+                "/api/v1/market-indicators/prices",
+                query: [URLQueryItem(name: "symbols", value: chunk.joined(separator: ","))],
+                group: .marketIndicator
+            )
+            result += page
+        }
+        return result
+    }
+
+    /// A market indicator's candles, newest first. Minute candles exist for indices only.
+    /// `count` is clamped to the API maximum of 200.
+    func indicatorCandles(symbol: String, interval: CandleInterval, count: Int, before: String? = nil) async throws -> MarketIndicatorCandlePage {
+        var query = [
+            URLQueryItem(name: "interval", value: interval.rawValue),
+            URLQueryItem(name: "count", value: String(min(max(count, 1), 200))),
+        ]
+        if let before { query.append(URLQueryItem(name: "before", value: before)) }
+        // Catalog symbols are `[A-Za-z0-9_]`, so they go in the path as they are.
+        return try await get("/api/v1/market-indicators/\(symbol)/candles", query: query, group: .marketIndicatorChart)
     }
 
     func usdKrwRate() async throws -> ExchangeRate {
