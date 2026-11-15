@@ -12,6 +12,7 @@ Each stock item is its own menu bar item, for example `삼성전자 72,000 +1.23
 
 - **Popover:** clicking the item opens a price chart (1D / 1M / 3M / 6M / 1Y) with the day's open, high, low and volume.
 - **US stocks:** each item can show its price in dollars or in won, converted at the USD/KRW base rate (매매기준율).
+- **Market status:** the popover shows the stock's market session, such as `정규장 · 15:30까지`, or when it opens next, such as `장 마감 · 다음 개장 11/17 08:00 프리마켓`. US stocks tell the day, pre, regular and after market apart.
 - **Custom format:** see [Menu bar format](#menu-bar-format).
 
 ### Asset items
@@ -21,6 +22,7 @@ An asset item shows the profit on an account's holdings as `{profit}₩ ({rate}%
 - **Profit:** since purchase or since the previous close, either raw or after fees and taxes.
 - **Popover:** clicking the item lists every holding with its price, a 30-day sparkline and its profit. Tapping a holding shows how its market value, purchase amount, profit, costs and weight are calculated.
 - **US holdings:** converted to KRW at the base rate.
+- **Market status:** the popover shows the session of each market the holdings trade on.
 - **Profit colors:** each item can color its profit and rate by their sign, red for a gain and blue for a loss by default. The color convention is set in the general settings.
 - **Custom format:** see [Menu bar format](#menu-bar-format).
 
