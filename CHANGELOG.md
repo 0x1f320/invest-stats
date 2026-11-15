@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-dev.7](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.6...v1.0.0-dev.7) (2026-11-15)
+
+### Bug Fixes
+
+* pad the settings window and unify tab backgrounds ([#21](https://github.com/0x1f320/invest-stats/issues/21)) ([c6267a4](https://github.com/0x1f320/invest-stats/commit/c6267a47babb1c3b4940bcbbbf5a56d917b19731))
+
 ## [1.0.0-dev.6](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.5...v1.0.0-dev.6) (2026-11-15)
 
 ### ⚠ BREAKING CHANGES
