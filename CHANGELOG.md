@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.1.0...v1.1.1-dev.1) (2026-11-15)
+
+### Bug Fixes
+
+* **update:** check for updates every 30 minutes ([#39](https://github.com/0x1f320/invest-stats/issues/39)) ([cff1235](https://github.com/0x1f320/invest-stats/commit/cff1235d0723d9b15a27fd8a9bbd62bc6fae456d))
+
 ## [1.1.0](https://github.com/0x1f320/invest-stats/compare/v1.0.0...v1.1.0) (2026-11-15)
 
 ### Features
