@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.1...v1.1.1-dev.2) (2026-11-15)
+
+### Bug Fixes
+
+* **status-bar:** close the popover when an app window opens ([#40](https://github.com/0x1f320/invest-stats/issues/40)) ([fa08b37](https://github.com/0x1f320/invest-stats/commit/fa08b3752316260d3ab77f0dbf4db350435c139a))
+
 ## [1.1.1-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.1.0...v1.1.1-dev.1) (2026-11-15)
 
 ### Bug Fixes
