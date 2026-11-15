@@ -144,10 +144,27 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowDidBecomeKey(_:)),
+            name: NSWindow.didBecomeKeyNotification, object: nil
+        )
         env.data.refreshSoon()
     }
 
+    /// Closes the popover when one of the app's windows (settings, an item editor, the update
+    /// window) comes forward, such as one opened from the popover's own menu. A transient
+    /// popover closes only on clicks outside it, so it would otherwise stay over that window.
+    @objc private func windowDidBecomeKey(_ notification: Notification) {
+        guard popover.isShown, let window = notification.object as? NSWindow,
+              window !== popover.contentViewController?.view.window,
+              // Only titled windows: menus and other popovers don't count.
+              window.styleMask.contains(.titled)
+        else { return }
+        popover.performClose(nil)
+    }
+
     func popoverDidClose(_ notification: Notification) {
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
         // Drop the content so the SwiftUI tasks (chart refresh) stop.
         popover.contentViewController = nil
     }
