@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.2...v1.1.1-dev.3) (2026-11-15)
+
+### Bug Fixes
+
+* **update:** check releases without the github api rate limit ([#41](https://github.com/0x1f320/invest-stats/issues/41)) ([88c937d](https://github.com/0x1f320/invest-stats/commit/88c937d49f9fe8b8b701992b41cbda3ba734b360))
+
 ## [1.1.1-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.1...v1.1.1-dev.2) (2026-11-15)
 
 ### Bug Fixes
