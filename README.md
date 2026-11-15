@@ -33,7 +33,7 @@ An indicator item shows a market index, a Korean government bond yield or the US
 - **Indicators:** KOSPI and KOSDAQ, government bond yields (2, 3, 5, 10, 20 and 30 years), and the USD/KRW base rate (매매기준율).
 - **Values as the API reports them:** indices in points, bond yields in percent, and the exchange rate in won per dollar.
 - **Change:** an index shows its change rate since the previous close and a bond yield its change in percentage points (`%p`), both against the previous daily close the API reports. The exchange rate API reports no previous value, so the exchange rate shows only the direction it reports.
-- **Popover:** clicking the item shows the value with the day's open, high, low and previous close, or for the exchange rate, the buying rate and its spread over the base rate.
+- **Popover:** clicking the item opens a chart (1D / 1M / 3M / 6M / 1Y for indices; bonds have daily candles only, so no 1D) with the day's open, high, low and previous close. The exchange rate API has no candles, so its popover shows the buying rate and its spread over the base rate instead.
 - **Custom format:** see [Menu bar format](#menu-bar-format).
 
 ### Menu bar format

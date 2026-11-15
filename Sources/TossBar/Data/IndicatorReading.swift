@@ -103,3 +103,26 @@ struct IndicatorReading: Equatable {
         return candles.first { calendar.startOfDay(for: $0.timestamp) < day }?.closePrice.value
     }
 }
+
+/// Chart rules for indicators.
+enum IndicatorChart {
+    /// The ranges an indicator can chart: bonds have no minute candles, so no 1D.
+    static func ranges(for indicator: MarketIndicator) -> [ChartRange] {
+        indicator.hasMinuteCandles ? ChartRange.allCases : ChartRange.allCases.filter { $0 != .day }
+    }
+
+    /// The range to show: the saved one if the indicator supports it, else the first it does.
+    static func range(_ saved: ChartRange, for indicator: MarketIndicator) -> ChartRange {
+        let ranges = ranges(for: indicator)
+        return ranges.contains(saved) ? saved : ranges[0]
+    }
+
+    /// The candles, newest first, from the same KST day as the newest one. An indicator
+    /// candle's timestamp is the start of its bar, so it falls on its own session's day.
+    static func sessionCandles(_ candles: [MarketIndicatorCandle]) -> [MarketIndicatorCandle] {
+        guard let newest = candles.first else { return [] }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        return candles.filter { calendar.isDate($0.timestamp, inSameDayAs: newest.timestamp) }
+    }
+}
