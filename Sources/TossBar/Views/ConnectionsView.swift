@@ -333,9 +333,7 @@ struct ConnectionSyncSection: View {
             .disabled(!connections.canSync)
 
             Group {
-                if !connections.canSync {
-                    Text("서명된 정식 릴리스 빌드에서만 사용할 수 있습니다.")
-                } else if connections.syncsWithICloud {
+                if connections.syncsWithICloud {
                     Text("모든 연결과 토큰을 같은 Apple 계정의 다른 Mac 과 함께 씁니다. 끄면 지금 연결이 이 Mac 에 남고, 다른 Mac 은 iCloud 의 연결을 계속 씁니다. 각 Mac 의 공인 IP 는 따로 허용 IP 로 등록해야 합니다.")
                 } else {
                     Text("켜면 이 Mac 의 모든 연결과 토큰을 iCloud 키체인으로 옮겨 같은 Apple 계정의 다른 Mac 과 함께 씁니다.")
