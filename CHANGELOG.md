@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/0x1f320/invest-stats/compare/v1.0.0...v1.1.0) (2026-11-15)
+
+### Features
+
+* **alerts:** evaluate price alert conditions with re-arming ([#32](https://github.com/0x1f320/invest-stats/issues/32)) ([db2bf8a](https://github.com/0x1f320/invest-stats/commit/db2bf8acb834d4737adb8ed0e26a97963e4cf7eb))
+* **alerts:** notify price alerts and set them per item ([#33](https://github.com/0x1f320/invest-stats/issues/33)) ([4c09287](https://github.com/0x1f320/invest-stats/commit/4c09287c8745f9f2d52828725023af5eae6779e5)), closes [#32](https://github.com/0x1f320/invest-stats/issues/32)
+* **api:** add market indicator endpoints ([#34](https://github.com/0x1f320/invest-stats/issues/34)) ([0dd7e8e](https://github.com/0x1f320/invest-stats/commit/0dd7e8e3e5e58f4dcca5407063797d65227a6cd5))
+* **indicator:** add market index, bond yield and exchange rate items ([#35](https://github.com/0x1f320/invest-stats/issues/35)) ([85617d7](https://github.com/0x1f320/invest-stats/commit/85617d7e45b8e2b739867ec44a24691097c74256)), closes [#29](https://github.com/0x1f320/invest-stats/issues/29) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#31](https://github.com/0x1f320/invest-stats/issues/31) [#34](https://github.com/0x1f320/invest-stats/issues/34) [#29](https://github.com/0x1f320/invest-stats/issues/29) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#31](https://github.com/0x1f320/invest-stats/issues/31)
+* **indicator:** chart indices and bond yields in the popover ([#36](https://github.com/0x1f320/invest-stats/issues/36)) ([f107031](https://github.com/0x1f320/invest-stats/commit/f10703189ff5c83a627c29c3210872e4ed7c0543)), closes [#35](https://github.com/0x1f320/invest-stats/issues/35)
+* **market:** show the market session in stock and asset popovers ([#29](https://github.com/0x1f320/invest-stats/issues/29)) ([fcc5d13](https://github.com/0x1f320/invest-stats/commit/fcc5d130aef1a61c367c2ff60baf3ae862075042))
+* **menubar:** optionally dim items while their markets are closed ([#31](https://github.com/0x1f320/invest-stats/issues/31)) ([aa65080](https://github.com/0x1f320/invest-stats/commit/aa6508089cd75682e65e39380ef4f9a471a7b719))
+
+### Performance Improvements
+
+* **market:** poll less while every market is closed ([#30](https://github.com/0x1f320/invest-stats/issues/30)) ([d63b71e](https://github.com/0x1f320/invest-stats/commit/d63b71e21553b95ec0491484e37ec2ee252bef7a))
+
 ## [1.1.0-dev.5](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.4...v1.1.0-dev.5) (2026-11-15)
 
 ### Features
