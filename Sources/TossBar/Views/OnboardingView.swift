@@ -5,10 +5,20 @@ struct OnboardingView: View {
     let env: AppEnvironment
     var onFinish: () -> Void
 
+    @ObservedObject private var connections: ConnectionStore
     @State private var provider: Provider = .tossinvest
     @State private var connected: StoredConnection?
     @State private var addAsset = true
     @State private var addSamsung = false
+
+    init(env: AppEnvironment, onFinish: @escaping () -> Void) {
+        self.env = env
+        self.onFinish = onFinish
+        self.connections = env.connections
+    }
+
+    /// A connection made here, or one that turning sync on brought in from another Mac.
+    private var ready: StoredConnection? { connected ?? connections.connections.first }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -32,6 +42,14 @@ struct OnboardingView: View {
 
             ProviderHelp(provider: provider)
 
+            if connections.canSync {
+                GroupBox {
+                    ConnectionSyncSection(connections: connections)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                }
+            }
+
             GroupBox {
                 ConnectionForm(connections: env.connections, provider: provider, existingID: nil) { stored, _ in
                     connected = stored
@@ -40,7 +58,7 @@ struct OnboardingView: View {
                 .padding(6)
             }
 
-            if connected != nil, env.store.items.isEmpty {
+            if ready != nil, env.store.items.isEmpty {
                 GroupBox("메뉴바에 추가할 항목") {
                     VStack(alignment: .leading, spacing: 6) {
                         Toggle("자산 — 보유 종목 전체 손익 ({수익}₩ ({수익률}%))", isOn: $addAsset)
@@ -57,7 +75,7 @@ struct OnboardingView: View {
                 Button("나중에 하기") { onFinish() }
                 Spacer()
                 Button("시작하기") {
-                    if let connected, env.store.items.isEmpty {
+                    if let connected = ready, env.store.items.isEmpty {
                         if addAsset {
                             env.store.upsert(MenuItemConfig(kind: .asset(AssetItemConfig()), connectionID: connected.id))
                         }
@@ -69,7 +87,7 @@ struct OnboardingView: View {
                     onFinish()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(connected == nil)
+                .disabled(ready == nil)
             }
         }
         .padding(24)

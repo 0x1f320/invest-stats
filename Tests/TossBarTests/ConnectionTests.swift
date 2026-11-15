@@ -55,18 +55,24 @@ struct ConnectionTests {
         #expect(string[string.index(string.startIndex, offsetBy: 14)] == "5")
     }
 
-    @Test func mergePrefersSyncedCopyAndSortsByAge() {
-        let old = Date(timeIntervalSinceReferenceDate: 100)
-        let new = Date(timeIntervalSinceReferenceDate: 200)
-        let localA = Connection(id: idA, provider: .tossinvest, name: "local", createdAt: old)
-        let syncedA = Connection(id: idA, provider: .tossinvest, name: "synced", createdAt: old)
-        let localB = Connection(id: idB, provider: .tossinvest, createdAt: new)
+    @Test func listSortsByAge() {
+        let old = Connection(id: idB, provider: .tossinvest, createdAt: Date(timeIntervalSinceReferenceDate: 100))
+        let new = Connection(id: idA, provider: .tossinvest, createdAt: Date(timeIntervalSinceReferenceDate: 200))
+        let list = StoredConnection.list([new, old], in: .iCloudKeychain)
+        #expect(list.map(\.id) == [idB, idA])
+        #expect(list.allSatisfy { $0.location == .iCloudKeychain })
+    }
 
-        let merged = StoredConnection.merge(local: [localB, localA], synced: [syncedA])
-        #expect(merged.map(\.id) == [idA, idB])
-        #expect(merged[0].connection.name == "synced")
-        #expect(merged[0].syncsWithICloud)
-        #expect(merged[1].location == .local)
+    @Test func syncCopiesOnlyWhatTheTargetLacks() {
+        // Turning sync on keeps the copy other Macs already use for a shared connection.
+        let local = [
+            Connection(id: idA, provider: .tossinvest, name: "local A"),
+            Connection(id: idB, provider: .tossinvest, name: "local B"),
+        ]
+        let synced = [Connection(id: idA, provider: .tossinvest, name: "synced A")]
+        let copies = StoredConnection.missing(from: synced, in: local)
+        #expect(copies.map(\.name) == ["local B"])
+        #expect(StoredConnection.missing(from: local, in: synced).isEmpty)
     }
 }
 
@@ -109,8 +115,9 @@ struct ConnectionMigrationTests {
         #expect(plan.steps.first?.token == nil)
     }
 
-    @Test func currentLocationBecomesDefault() {
-        // A Mac that used the iCloud Keychain, with older local keys left behind.
+    @Test func syncingMacKeepsEverythingInICloud() {
+        // A Mac that used the iCloud Keychain, with older local keys left behind. It syncs
+        // all of its connections, so both end up in iCloud, and its own keys are the default.
         let plan = ConnectionMigration.plan(
             current: .iCloudKeychain,
             legacy: [
@@ -120,7 +127,22 @@ struct ConnectionMigrationTests {
             existingIDs: [], now: now
         )
         #expect(plan.defaultID == Connection.legacyID(provider: .tossinvest, identity: "client-1"))
-        #expect(plan.steps.map(\.location) == [.iCloudKeychain, .local])
+        #expect(plan.steps.map(\.location) == [.iCloudKeychain, .iCloudKeychain])
+    }
+
+    @Test func localMacLeavesSharedKeysInICloud() {
+        // A Mac that didn't sync: its own keys stay local, and keys another Mac shared stay
+        // in iCloud, where turning sync on picks them up.
+        let plan = ConnectionMigration.plan(
+            current: .local,
+            legacy: [
+                .init(credentials: otherKeys, token: nil, location: .iCloudKeychain),
+                .init(credentials: keys, token: nil, location: .local),
+            ],
+            existingIDs: [], now: now
+        )
+        #expect(plan.defaultID == Connection.legacyID(provider: .tossinvest, identity: "client-1"))
+        #expect(plan.steps.map(\.location) == [.local, .iCloudKeychain])
     }
 
     @Test func sameKeysInBothPlacesBecomeOneConnection() {

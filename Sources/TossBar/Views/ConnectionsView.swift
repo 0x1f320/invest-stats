@@ -35,6 +35,8 @@ struct ConnectionsSettingsView: View {
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            ConnectionSyncSection(connections: connections)
+
             List(selection: $selection) {
                 ForEach(connections.connections) { stored in
                     row(stored)
@@ -118,8 +120,8 @@ struct ConnectionsSettingsView: View {
 
     private func deleteMessage(_ stored: StoredConnection) -> String {
         var lines: [String] = []
-        if stored.syncsWithICloud {
-            lines.append("iCloud 키체인으로 동기화된 연결이라 다른 Mac 에서도 삭제됩니다.")
+        if connections.syncsWithICloud {
+            lines.append("연결을 iCloud 로 동기화하고 있어 다른 Mac 에서도 삭제됩니다.")
         }
         let count = usageCount(stored)
         if count > 0 {
@@ -144,9 +146,6 @@ struct ConnectionsSettingsView: View {
                 .lineLimit(1).truncationMode(.middle)
             }
             Spacer()
-            Image(systemName: stored.syncsWithICloud ? "icloud" : "laptopcomputer")
-                .foregroundStyle(.secondary)
-                .help(stored.syncsWithICloud ? "iCloud 키체인으로 다른 Mac 과 동기화" : "이 Mac 에만 저장")
         }
         .padding(.vertical, 3)
     }
@@ -180,8 +179,8 @@ struct ConnectionEditor: View {
 
 // MARK: - Form
 
-/// Name, keys and iCloud sync for one connection, with a connection test. Used by the
-/// connection editor and by onboarding.
+/// Name and keys for one connection, with a connection test. Used by the connection editor
+/// and by onboarding.
 struct ConnectionForm: View {
     @ObservedObject var connections: ConnectionStore
     let provider: Provider
@@ -192,8 +191,6 @@ struct ConnectionForm: View {
     @State private var savedID: UUID?
     @State private var name = ""
     @State private var values: [String: String] = [:]
-    @State private var syncWithICloud = false
-    @State private var confirmUnsync = false
     @State private var isTesting = false
     @State private var status: Status = .idle
 
@@ -239,20 +236,6 @@ struct ConnectionForm: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("iCloud 키체인으로 이 연결을 다른 Mac 과 동기화", isOn: $syncWithICloud)
-                    .disabled(!connections.canSync)
-                Group {
-                    if connections.canSync {
-                        Text("같은 Apple 계정의 다른 Mac 에도 이 연결이 나타나고, 토큰도 함께 공유합니다. 각 Mac 의 공인 IP 는 따로 허용 IP 로 등록해야 합니다. 변경 사항은 저장할 때 적용됩니다.")
-                    } else {
-                        Text("서명된 정식 릴리스 빌드에서만 사용할 수 있습니다.")
-                    }
-                }
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
             HStack(spacing: 10) {
                 Button(action: save) {
                     if isTesting {
@@ -263,11 +246,6 @@ struct ConnectionForm: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canSave)
-                .confirmationDialog("iCloud 동기화를 끌까요?", isPresented: $confirmUnsync) {
-                    Button("동기화 끄기", role: .destructive, action: performSave)
-                } message: {
-                    Text("이 연결이 이 Mac 에만 남고, 같은 iCloud 키체인을 쓰는 다른 Mac 에서는 삭제됩니다.")
-                }
                 Spacer()
             }
 
@@ -297,27 +275,17 @@ struct ConnectionForm: View {
         values = existing.connection.values.filter { key, _ in
             provider.fields.contains { $0.key == key && !$0.isSecret }
         }
-        syncWithICloud = existing.syncsWithICloud
     }
 
     private func save() {
         guard canSave else { return }
-        if existing?.syncsWithICloud == true, !syncWithICloud {
-            confirmUnsync = true
-        } else {
-            performSave()
-        }
-    }
-
-    private func performSave() {
         let saved: StoredConnection
         do {
             saved = try connections.save(
                 id: savedID ?? existingID,
                 provider: provider,
                 name: name,
-                values: values,
-                syncWithICloud: syncWithICloud
+                values: values
             )
         } catch {
             status = .failure(error.localizedDescription)
@@ -343,6 +311,58 @@ struct ConnectionForm: View {
     }
 }
 
+/// The Mac-wide switch for syncing every connection through the iCloud Keychain, and an
+/// offer to turn it on when another Mac has shared connections there.
+struct ConnectionSyncSection: View {
+    @ObservedObject var connections: ConnectionStore
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("iCloud 키체인으로 연결 동기화", isOn: Binding(
+                get: { connections.syncsWithICloud },
+                set: { enabled in
+                    do {
+                        try connections.setSync(enabled)
+                        error = nil
+                    } catch {
+                        self.error = error.localizedDescription
+                    }
+                }
+            ))
+            .disabled(!connections.canSync)
+
+            Group {
+                if !connections.canSync {
+                    Text("서명된 정식 릴리스 빌드에서만 사용할 수 있습니다.")
+                } else if connections.syncsWithICloud {
+                    Text("모든 연결과 토큰을 같은 Apple 계정의 다른 Mac 과 함께 씁니다. 끄면 지금 연결이 이 Mac 에 남고, 다른 Mac 은 iCloud 의 연결을 계속 씁니다. 각 Mac 의 공인 IP 는 따로 허용 IP 로 등록해야 합니다.")
+                } else {
+                    Text("켜면 이 Mac 의 모든 연결과 토큰을 iCloud 키체인으로 옮겨 같은 Apple 계정의 다른 Mac 과 함께 씁니다.")
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if connections.unsyncedSharedCount > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "icloud.fill").foregroundStyle(.blue)
+                    Text("다른 Mac 이 iCloud 에 공유한 연결 \(connections.unsyncedSharedCount)개가 있습니다. 동기화를 켜면 이 Mac 의 연결과 합쳐집니다.")
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(8)
+                .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
+
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        }
+    }
+}
+
 /// How to get a provider's API keys.
 struct ProviderHelp: View {
     let provider: Provider
@@ -353,7 +373,7 @@ struct ProviderHelp: View {
             case .tossinvest:
                 Text("1. PC 웹(토스증권 WTS)에 로그인 → 설정 → Open API 에서 클라이언트를 등록합니다.")
                 Text("2. 이 Mac 이 사용하는 공인 IP 를 허용 IP 로 등록해야 합니다. (미등록 시 403)")
-                Text("3. 발급된 client_id / client_secret 을 입력하세요. 연결은 기본적으로 이 Mac 사용자만 읽을 수 있는 파일(~/Library/Application Support/TossBar)에 저장되며, 원하면 iCloud 키체인으로 다른 Mac 과 동기화할 수 있습니다.")
+                Text("3. 발급된 client_id / client_secret 을 입력하세요. 연결은 기본적으로 이 Mac 사용자만 읽을 수 있는 파일(~/Library/Application Support/TossBar)에 저장되며, 연결 설정에서 iCloud 동기화를 켜면 모든 연결을 다른 Mac 과 함께 쓸 수 있습니다.")
                 Text("※ 토스증권은 클라이언트당 토큰을 1개만 유효하게 유지합니다. 같은 키를 다른 프로그램과 함께 쓰면 서로의 토큰이 무효화되니 Invest Stats 전용 키를 쓰는 것을 권장합니다. iCloud 로 동기화한 Mac 끼리는 토큰도 함께 공유해 이를 줄이지만, 동기화가 늦으면 잠시 오류가 날 수 있습니다.")
                     .foregroundStyle(.secondary)
                 Link("토스증권 Open API 문서 열기", destination: URL(string: "https://developers.tossinvest.com/docs")!)

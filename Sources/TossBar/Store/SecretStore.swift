@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Where a connection and its cached access token are kept.
+/// Where this Mac keeps its connections and their cached access tokens.
 enum SecretLocation: String, Sendable {
     /// User-only files under `~/Library/Application Support/TossBar/`. The default.
     case local
@@ -9,13 +9,21 @@ enum SecretLocation: String, Sendable {
     /// in builds signed with the provisioning profile that grants a keychain access group.
     case iCloudKeychain
 
-    /// The `UserDefaults` key where earlier versions saved the location of their one set
-    /// of keys. Read only to migrate those keys into a connection.
-    static let legacyKey = "secretLocation"
+    /// The `UserDefaults` key for this Mac's choice. Earlier versions used it for the
+    /// location of their one set of keys, with the same values.
+    static let key = "secretLocation"
 
     /// A saved location. Anything missing or unknown means `.local`.
     static func parse(_ raw: String?) -> SecretLocation {
         raw.flatMap(SecretLocation.init(rawValue:)) ?? .local
+    }
+
+    static func saved(in defaults: UserDefaults = .standard) -> SecretLocation {
+        parse(defaults.string(forKey: key))
+    }
+
+    func save(in defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.key)
     }
 }
 

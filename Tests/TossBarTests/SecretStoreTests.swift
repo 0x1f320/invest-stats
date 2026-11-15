@@ -5,8 +5,7 @@ import Testing
 @Suite("Secret storage")
 struct SecretStoreTests {
     @Test func locationDefaultsToLocal() {
-        // Installs that never chose a location kept their keys in local files, which the
-        // migration to connections must read from.
+        // Installs that never turned on iCloud keep their connections in local files.
         #expect(SecretLocation.parse(nil) == .local)
         #expect(SecretLocation.parse("") == .local)
         #expect(SecretLocation.parse("somethingElse") == .local)

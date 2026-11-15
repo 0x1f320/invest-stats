@@ -55,9 +55,9 @@ struct ProviderField: Hashable, Identifiable, Sendable {
 
 /// A saved connection to a provider: which provider, a name, and its keys.
 ///
-/// Connections are stored with the other secrets, either in user-only files on this Mac or
-/// in the iCloud Keychain, where they sync to the user's other Macs. Where a connection is
-/// kept is not part of the record; it follows from where the record was found.
+/// Connections are stored with the other secrets: all of a Mac's connections either in
+/// user-only files or, when the Mac syncs them, in the iCloud Keychain, where the user's
+/// other Macs see them too. Where a connection is kept is not part of the record.
 struct Connection: Codable, Hashable, Identifiable, Sendable {
     var id: UUID
     var provider: Provider
@@ -116,26 +116,29 @@ extension Connection {
     }
 }
 
-/// A connection and where this Mac found it.
+/// A connection and where this Mac keeps it.
 struct StoredConnection: Hashable, Identifiable, Sendable {
     var connection: Connection
     var location: SecretLocation
 
     var id: UUID { connection.id }
-    var syncsWithICloud: Bool { location == .iCloudKeychain }
 
-    /// Combines the connections kept on this Mac and in the iCloud Keychain, oldest first.
-    /// A connection found in both places is the synced one.
-    static func merge(local: [Connection], synced: [Connection]) -> [StoredConnection] {
-        var byID: [UUID: StoredConnection] = [:]
-        for connection in local { byID[connection.id] = StoredConnection(connection: connection, location: .local) }
-        for connection in synced { byID[connection.id] = StoredConnection(connection: connection, location: .iCloudKeychain) }
-        return byID.values.sorted { lhs, rhs in
-            if lhs.connection.createdAt != rhs.connection.createdAt {
-                return lhs.connection.createdAt < rhs.connection.createdAt
+    /// The connections found in `location`, oldest first.
+    static func list(_ connections: [Connection], in location: SecretLocation) -> [StoredConnection] {
+        connections
+            .sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id.uuidString < rhs.id.uuidString
             }
-            return lhs.id.uuidString < rhs.id.uuidString
-        }
+            .map { StoredConnection(connection: $0, location: location) }
+    }
+
+    /// The connections to copy when a Mac starts or stops syncing: those in `source` that
+    /// `target` doesn't have yet. A connection already in `target` keeps that copy, since
+    /// it is the one the user's other Macs use.
+    static func missing(from target: [Connection], in source: [Connection]) -> [Connection] {
+        let ids = Set(target.map(\.id))
+        return source.filter { !ids.contains($0.id) }
     }
 }
 
@@ -164,9 +167,11 @@ enum ConnectionVault {
 /// Turns the single set of keys that earlier versions saved into a connection.
 ///
 /// Earlier versions kept one `credentials` record and one `access-token` record, either in
-/// local files or in the iCloud Keychain (`secretLocation`). Keys found in either place
-/// become a connection in the same place, with the same cached token, and the old records
-/// are deleted. Runs once per Mac; a build without the iCloud Keychain entitlement migrates
+/// local files or in the iCloud Keychain (`secretLocation`, which now says where all of the
+/// Mac's connections live). Keys found in either place become a connection with the same
+/// cached token, and the old records are deleted. A Mac that synced keeps everything in the
+/// iCloud Keychain; a Mac that didn't leaves keys it finds there in iCloud, where turning
+/// sync on picks them up. Runs once per Mac; a build without the iCloud Keychain entitlement migrates
 /// only the local keys and tries again on the next launch, so keys in the iCloud Keychain
 /// are still picked up once a signed build runs.
 enum ConnectionMigration {
@@ -208,7 +213,8 @@ enum ConnectionMigration {
                 createdAt: now
             )
             let token = entry.token.flatMap { $0.clientId == entry.credentials.clientId ? $0 : nil }
-            steps.append(Step(connection: connection, location: entry.location, token: token))
+            let location = current == .iCloudKeychain ? .iCloudKeychain : entry.location
+            steps.append(Step(connection: connection, location: location, token: token))
         }
         return Plan(steps: steps, defaultID: defaultID)
     }
@@ -219,7 +225,7 @@ enum ConnectionMigration {
     static func runIfNeeded(defaults: UserDefaults = .standard, canSync: Bool = SyncedKeychain.isAvailable) -> UUID? {
         guard !defaults.bool(forKey: doneKey) else { return nil }
 
-        var current = SecretLocation.parse(defaults.string(forKey: SecretLocation.legacyKey))
+        var current = SecretLocation.saved(in: defaults)
         if current == .iCloudKeychain, !canSync { current = .local }
         let locations: [SecretLocation] = canSync ? [.local, .iCloudKeychain] : [.local]
 
@@ -249,7 +255,6 @@ enum ConnectionMigration {
             SecretStore.delete(name: CachedToken.legacyName, from: entry.location)
         }
         if canSync {
-            defaults.removeObject(forKey: SecretLocation.legacyKey)
             defaults.set(true, forKey: doneKey)
         }
         return plan.defaultID

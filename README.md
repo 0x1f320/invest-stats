@@ -28,7 +28,7 @@ Each item reads from a connection: a provider (Toss Securities for now) and its 
 
 - **Several connections:** add as many as you like, including more than one for the same provider, for example your own account and a family member's. Each one needs its own keys, since two connections with the same keys would keep invalidating each other's token.
 - **Per item:** the stock and asset editors ask which connection the item reads from.
-- **iCloud sync:** in release builds, a connection can sync through the iCloud Keychain, together with its cached token. It then shows up on your other Macs signed in to the same Apple Account.
+- **iCloud sync:** in release builds, turn on **iCloud 키체인으로 연결 동기화** in the 연결 tab to sync all connections, with their cached tokens, through the iCloud Keychain. They then show up on your other Macs signed in to the same Apple Account that have sync on. A Mac with sync off offers connections it finds there.
 
 ### Any number of items
 
@@ -86,13 +86,13 @@ scripts/test.sh
 1. **Register a client:** in Toss Securities WTS (the PC web app), open 설정 > Open API and register a client. Add this Mac's public IP to the allowed IPs; requests from other IPs fail with 403.
 2. **Add a connection:** enter the Client ID and Secret in the window that opens on first launch, then click **저장 및 연결 테스트** (save and test). Add more connections later in the **연결** settings tab.
 3. **Storage:** by default a connection is stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). It is not stored in the login Keychain, so rebuilding the app never asks for your password.
-   - **Sync with your other Macs:** in release builds, turn on **iCloud 키체인으로 이 연결을 다른 Mac 과 동기화** before saving. The connection and its cached token move to the iCloud Keychain and appear on your other Macs signed in to the same Apple Account. Turning sync off again keeps the connection on this Mac only and removes it from the others.
+   - **Sync with your other Macs:** in release builds, turn on **iCloud 키체인으로 연결 동기화**. Every connection and its cached token move to the iCloud Keychain and are shared with your other Macs signed in to the same Apple Account. Turning sync off keeps a copy of the connections on this Mac and leaves the other Macs as they are.
    - Each Mac still needs its public IP in the client's allowed IPs.
 4. **Use a dedicated client:** Toss Securities keeps only one valid token per client. If another tool uses the same keys, each will keep invalidating the other's token.
 
 ### Upgrading from a version without connections
 
-The single set of keys that earlier versions saved becomes a connection on the first launch, in the same place (this Mac or the iCloud Keychain) and with the same cached token, and existing items use it. Macs that migrate the same keys arrive at the same connection, so a synced connection is never duplicated.
+The single set of keys that earlier versions saved becomes a connection on the first launch, with the same cached token, and existing items use it. A Mac that stored its keys in the iCloud Keychain starts with connection sync on. Macs that migrate the same keys arrive at the same connection, so a synced connection is never duplicated.
 
 ## Troubleshooting
 

@@ -16,12 +16,18 @@ enum ConnectionError: LocalizedError {
     }
 }
 
-/// The connections this Mac can use: those kept in local files and those synced through
-/// the iCloud Keychain. Also owns one API client per connection.
+/// The connections this Mac uses, kept either in local files or, when the Mac syncs them,
+/// in the iCloud Keychain together with the user's other Macs. Also owns one API client per
+/// connection.
 @MainActor
 final class ConnectionStore: ObservableObject {
     /// Oldest first. The first one is used by items that don't name a connection.
     @Published private(set) var connections: [StoredConnection] = []
+    /// Where this Mac keeps its connections. Changed only through `setSync`.
+    @Published private(set) var location: SecretLocation
+    /// While this Mac doesn't sync: how many connections in the iCloud Keychain it doesn't
+    /// have, put there by another Mac. Turning sync on brings them in.
+    @Published private(set) var unsyncedSharedCount = 0
 
     /// Whether this build can use the iCloud Keychain at all (release builds only).
     let canSync = SyncedKeychain.isAvailable
@@ -30,9 +36,12 @@ final class ConnectionStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
+        let saved = SecretLocation.saved()
+        // A build without the keychain entitlement can't read synced connections.
+        location = (saved == .iCloudKeychain && canSync) ? .iCloudKeychain : .local
         reload()
-        // Connections synced from another Mac arrive in the background. Look for them when
-        // the app comes forward, and every minute while it sits in the menu bar.
+        // Connections from other Macs arrive in the background. Look for them when the app
+        // comes forward, and every minute while it sits in the menu bar.
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
@@ -42,6 +51,8 @@ final class ConnectionStore: ObservableObject {
                 .store(in: &cancellables)
         }
     }
+
+    var syncsWithICloud: Bool { location == .iCloudKeychain }
 
     var isEmpty: Bool { connections.isEmpty }
 
@@ -77,33 +88,61 @@ final class ConnectionStore: ObservableObject {
     /// Reads the connections again. Clients of edited connections get the new keys, and
     /// clients of connections deleted elsewhere are dropped.
     func reload() {
-        let synced = canSync ? ConnectionVault.loadAll(from: .iCloudKeychain) : []
-        let merged = StoredConnection.merge(local: ConnectionVault.loadAll(from: .local), synced: synced)
-        guard merged != connections else { return }
+        let loaded = StoredConnection.list(ConnectionVault.loadAll(from: location), in: location)
+        if canSync, location == .local {
+            let shared = ConnectionVault.loadAll(from: .iCloudKeychain)
+            let count = StoredConnection.missing(from: loaded.map(\.connection), in: shared).count
+            if count != unsyncedSharedCount { unsyncedSharedCount = count }
+        } else if unsyncedSharedCount != 0 {
+            unsyncedSharedCount = 0
+        }
+        guard loaded != connections else { return }
         let previous = Dictionary(uniqueKeysWithValues: connections.map { ($0.id, $0) })
-        for stored in merged {
+        for stored in loaded {
             guard let client = clients[stored.id], previous[stored.id] != stored else { continue }
             let credentials = stored.connection.tossCredentials
             let location = stored.location
             Task { await client.update(credentials: credentials, location: location) }
         }
-        let ids = Set(merged.map(\.id))
+        let ids = Set(loaded.map(\.id))
         clients = clients.filter { ids.contains($0.key) }
-        connections = merged
+        connections = loaded
+    }
+
+    /// Starts or stops syncing all of this Mac's connections through the iCloud Keychain.
+    ///
+    /// Turning it on moves the local connections, with their tokens, into the iCloud Keychain
+    /// and joins them with those from the user's other Macs. Turning it off copies the synced
+    /// connections into local files and stops reading the iCloud Keychain; the synced copies
+    /// stay, so the other Macs keep working.
+    func setSync(_ enabled: Bool) throws {
+        let target: SecretLocation = (enabled && canSync) ? .iCloudKeychain : .local
+        guard target != location else { return }
+        let source = location
+        let copies = StoredConnection.missing(
+            from: ConnectionVault.loadAll(from: target),
+            in: ConnectionVault.loadAll(from: source)
+        )
+        for connection in copies {
+            try ConnectionVault.save(connection, to: target)
+            if let token = CachedToken.load(connection: connection.id, from: source) {
+                CachedToken.save(token, connection: connection.id, to: target)
+            }
+        }
+        if source == .local {
+            // Now in iCloud, so drop the local copies, including ones iCloud already had.
+            for connection in ConnectionVault.loadAll(from: .local) {
+                ConnectionVault.delete(connection.id, from: .local)
+            }
+        }
+        location = target
+        target.save()
+        reload()
     }
 
     /// Saves a new or edited connection and returns it as saved.
-    ///
     /// A blank secret field keeps the saved value, so other fields can be edited alone.
-    /// `syncWithICloud` moves the connection, with its cached token, between this Mac and
-    /// the iCloud Keychain. Moving it out of iCloud removes it from the user's other Macs.
-    func save(
-        id: UUID?,
-        provider: Provider,
-        name: String,
-        values: [String: String],
-        syncWithICloud: Bool
-    ) throws -> StoredConnection {
+    func save(id: UUID?, provider: Provider, name: String, values: [String: String]) throws -> StoredConnection {
         let previous = id.flatMap(connection)
         var merged = previous?.connection.values ?? [:]
         for field in provider.fields {
@@ -126,17 +165,9 @@ final class ConnectionStore: ObservableObject {
         }) {
             throw ConnectionError.duplicate(other.connection.displayName)
         }
-
-        let target: SecretLocation = (syncWithICloud && canSync) ? .iCloudKeychain : .local
-        try ConnectionVault.save(connection, to: target)
-        if let previous, previous.location != target {
-            if let token = CachedToken.load(connection: connection.id, from: previous.location) {
-                CachedToken.save(token, connection: connection.id, to: target)
-            }
-            ConnectionVault.delete(connection.id, from: previous.location)
-        }
+        try ConnectionVault.save(connection, to: location)
         reload()
-        return StoredConnection(connection: connection, location: target)
+        return StoredConnection(connection: connection, location: location)
     }
 
     /// Checks a connection by listing its accounts.
@@ -149,7 +180,8 @@ final class ConnectionStore: ObservableObject {
         return try await client.accounts()
     }
 
-    /// Deletes a connection. A synced one is deleted from the user's other Macs as well.
+    /// Deletes a connection. While this Mac syncs, that deletes it from the user's other
+    /// Macs as well.
     func delete(_ id: UUID) {
         guard let stored = connection(id) else { return }
         ConnectionVault.delete(id, from: stored.location)
