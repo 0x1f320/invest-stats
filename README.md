@@ -76,7 +76,7 @@ Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager
 
 ### Updates
 
-Invest Stats checks [GitHub Releases](https://github.com/0x1f320/invest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
+Invest Stats checks [GitHub Releases](https://github.com/0x1f320/invest-stats/releases) at launch and every 30 minutes. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
 
 - **Settings:** the **업데이트** (Updates) tab checks on demand and turns automatic checks off.
 - **Pre-releases:** turn on **프리릴리스 받기** to also get builds from `dev`. Pre-release builds start with it on.

@@ -171,7 +171,7 @@ struct UpdateSettingsView: View {
             if updater.isSupported {
                 Section {
                     Toggle("자동으로 업데이트 확인", isOn: $updater.automaticallyChecks)
-                    Text("실행할 때와 하루에 한 번 GitHub Releases 에서 새 버전을 확인하고, 있으면 변경 사항과 함께 알려 줍니다.")
+                    Text("실행할 때와 30분마다 GitHub Releases 에서 새 버전을 확인하고, 있으면 변경 사항과 함께 알려 줍니다.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Toggle("프리릴리스 받기", isOn: $updater.includesPrereleases)

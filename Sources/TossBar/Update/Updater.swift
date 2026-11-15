@@ -35,7 +35,7 @@ final class Updater: ObservableObject {
 
     static let repository = "0x1f320/invest-stats"
     static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
-    private static let checkInterval: Duration = .seconds(24 * 60 * 60)
+    private static let checkInterval: Duration = .seconds(30 * 60)
     private static let launchDelay: Duration = .seconds(5)
 
     private enum Key {
@@ -47,7 +47,7 @@ final class Updater: ObservableObject {
     let currentVersion: SemanticVersion?
     var isSupported: Bool { currentVersion != nil }
 
-    /// Check at launch and once a day.
+    /// Check at launch and every 30 minutes.
     @Published var automaticallyChecks: Bool {
         didSet {
             UserDefaults.standard.set(automaticallyChecks, forKey: Key.automaticallyChecks)
