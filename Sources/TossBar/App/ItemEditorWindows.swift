@@ -118,6 +118,9 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
                 ToolbarTab("display", "표시", symbol: "menubar.rectangle") {
                     StockDisplayPane(env: env, id: id)
                 },
+                ToolbarTab("alerts", "알림", symbol: "bell") {
+                    ItemAlertsPane(env: env, id: id)
+                },
             ]
         case .asset:
             return [
@@ -129,6 +132,9 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
                 },
                 ToolbarTab("display", "표시", symbol: "menubar.rectangle") {
                     AssetDisplayPane(env: env, id: id)
+                },
+                ToolbarTab("alerts", "알림", symbol: "bell") {
+                    ItemAlertsPane(env: env, id: id)
                 },
             ]
         case .indicator:

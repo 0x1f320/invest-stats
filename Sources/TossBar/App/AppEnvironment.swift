@@ -11,6 +11,8 @@ final class AppEnvironment: ObservableObject {
     let data: MarketDataHub
     let universe: StockUniverse
     let updater: Updater
+    let alertNotifier: AlertNotifier
+    let alertMonitor: AlertMonitor
 
     var openSettings: () -> Void = {}
     /// Opens an add dialog or an item's settings window.
@@ -27,6 +29,8 @@ final class AppEnvironment: ObservableObject {
         data = MarketDataHub(connections: connections, store: store, settings: settings)
         universe = StockUniverse()
         updater = Updater()
+        alertNotifier = AlertNotifier()
+        alertMonitor = AlertMonitor(store: store, data: data, notifier: alertNotifier)
     }
 
     /// Opens an item's settings window, from a menu, popover or the settings list.

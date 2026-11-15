@@ -41,7 +41,7 @@ struct CaptionText: View {
 // MARK: - Stock lookup
 
 @MainActor
-private enum StockLookup {
+enum StockLookup {
     static func name(of symbol: String, universe: StockUniverse, service: MarketDataService?) -> String? {
         universe.entries.first { $0.symbol == symbol }?.name ?? service?.stockInfo[symbol]?.name
     }
@@ -439,6 +439,8 @@ struct StockSymbolPane: View {
                     // Only US stocks have a price currency to choose.
                     if !isUS { $0.displayCurrency = .native }
                 }
+                // A target price belongs to the old stock.
+                store.removePriceAlerts(of: id)
             } catch {
                 self.error = error.localizedDescription
             }
