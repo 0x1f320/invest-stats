@@ -12,6 +12,7 @@ Each stock item is its own menu bar item, for example `삼성전자 72,000 +1.23
 
 - **Popover:** clicking the item opens a price chart (1D / 1M / 3M / 6M / 1Y) with the day's open, high, low and volume.
 - **US stocks:** each item can show its price in dollars or in won, converted at the USD/KRW base rate (매매기준율).
+- **Custom format:** see [Menu bar format](#menu-bar-format).
 
 ### Asset items
 
@@ -21,6 +22,24 @@ An asset item shows the profit on an account's holdings as `{profit}₩ ({rate}%
 - **Popover:** clicking the item lists every holding with its price, a 30-day sparkline and its profit. Tapping a holding shows how its market value, purchase amount, profit, costs and weight are calculated.
 - **US holdings:** converted to KRW at the base rate.
 - **Profit colors:** each item can color its profit and rate by their sign, red for a gain and blue for a loss by default. The color convention is set in the general settings.
+- **Custom format:** see [Menu bar format](#menu-bar-format).
+
+### Menu bar format
+
+Each item can replace its menu bar text with a format of its own, set in the **표시** (Display) tab of its settings window. Codes such as `%p` stand for the item's values, `%%` is a literal `%`, and any other text is shown as written. Left empty, the item keeps its default text.
+
+| Code | Stock item | Asset item |
+| --- | --- | --- |
+| `%n` | Name (display name or stock name) | |
+| `%c` | Stock code | |
+| `%p` | Price | Profit |
+| `%r` | Change rate since the previous close | Profit rate |
+| `%a` | Change amount since the previous close | |
+| `%l` | | Label |
+| `%v` | | Market value |
+| `%b` | | Purchase amount |
+
+For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, and `%l %r` shows `💰 +11.79%`.
 
 ### Connections
 

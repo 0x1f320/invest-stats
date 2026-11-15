@@ -24,11 +24,14 @@ struct StockItemConfig: Codable, Hashable {
     var showChange: Bool = true
     /// Price currency for US stocks, set per item.
     var displayCurrency: PriceDisplayCurrency = .native
+    /// Custom menu bar format, such as `%n %p (%r)`. nil uses `defaultFormat`, which follows
+    /// `showName` and `showChange`. See `TitleFormat`.
+    var format: String?
 }
 
 extension StockItemConfig {
     private enum CodingKeys: String, CodingKey {
-        case symbol, displayName, showName, showChange, displayCurrency
+        case symbol, displayName, showName, showChange, displayCurrency, format
     }
 
     /// Fills defaults for keys that older saved configs don't have.
@@ -39,6 +42,7 @@ extension StockItemConfig {
         showName = try c.decodeIfPresent(Bool.self, forKey: .showName) ?? true
         showChange = try c.decodeIfPresent(Bool.self, forKey: .showChange) ?? true
         displayCurrency = try c.decodeIfPresent(PriceDisplayCurrency.self, forKey: .displayCurrency) ?? .native
+        format = try c.decodeIfPresent(String.self, forKey: .format)
     }
 }
 
@@ -69,6 +73,9 @@ struct AssetItemConfig: Codable, Hashable {
     /// Colors the menu bar profit and rate by their sign, following the app's color
     /// convention. Off keeps the text white.
     var colorByTrend: Bool = false
+    /// Custom menu bar format, such as `%l %p`. nil uses `defaultFormat`, the design's
+    /// `{profit}₩ ({rate}%)`. See `TitleFormat`.
+    var format: String?
 
     /// True when the after-cost basis is actually in effect.
     var usesAfterCost: Bool { mode == .total && afterCost }
@@ -76,7 +83,7 @@ struct AssetItemConfig: Codable, Hashable {
 
 extension AssetItemConfig {
     private enum CodingKeys: String, CodingKey {
-        case label, accountSeq, mode, afterCost, colorByTrend
+        case label, accountSeq, mode, afterCost, colorByTrend, format
     }
 
     /// Fills defaults for keys that older saved configs don't have.
@@ -87,6 +94,7 @@ extension AssetItemConfig {
         mode = try c.decodeIfPresent(AssetMode.self, forKey: .mode) ?? .total
         afterCost = try c.decodeIfPresent(Bool.self, forKey: .afterCost) ?? false
         colorByTrend = try c.decodeIfPresent(Bool.self, forKey: .colorByTrend) ?? false
+        format = try c.decodeIfPresent(String.self, forKey: .format)
     }
 }
 
