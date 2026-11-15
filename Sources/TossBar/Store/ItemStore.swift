@@ -146,6 +146,8 @@ struct MenuItemConfig: Codable, Hashable, Identifiable {
     /// The connection the item reads from. nil, in items saved before connections
     /// existed, means the first connection.
     var connectionID: UUID?
+    /// Notifications when the item's price or rate crosses a threshold. See `PriceAlert`.
+    var alerts: [PriceAlert] = []
 
     var typeTitle: String {
         switch kind {
@@ -158,7 +160,7 @@ struct MenuItemConfig: Codable, Hashable, Identifiable {
 
 extension MenuItemConfig {
     private enum CodingKeys: String, CodingKey {
-        case id, kind, connectionID
+        case id, kind, connectionID, alerts
     }
 
     /// Fills defaults for keys that older saved configs don't have.
@@ -167,6 +169,8 @@ extension MenuItemConfig {
         id = try c.decode(UUID.self, forKey: .id)
         kind = try c.decode(ItemKind.self, forKey: .kind)
         connectionID = try c.decodeIfPresent(UUID.self, forKey: .connectionID)
+        alerts = try c.decodeIfPresent([LossyDecodable<PriceAlert>].self, forKey: .alerts)?
+            .compactMap(\.value) ?? []
     }
 }
 
