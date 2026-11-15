@@ -43,6 +43,10 @@ Each item can replace its menu bar text with a format of its own, set in the **�
 
 For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, and `%l %r` shows `💰 +11.79%`.
 
+### Closed markets
+
+Turn on **장이 닫힌 항목 흐리게 표시** in the general settings to dim an item's menu bar text while every market it follows is closed: the stock's market for a stock item, and the markets of the holdings for an asset item. The pre, after and US day market sessions count as open. It is off by default, so the text stays white.
+
 ### Connections
 
 Each item reads from a connection: a provider (Toss Securities for now) and its API keys. Connections are managed in the **연결** (Connections) settings tab.

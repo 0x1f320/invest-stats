@@ -188,10 +188,26 @@ enum TitleRenderer {
 
     static func title(for config: MenuItemConfig, env: AppEnvironment) -> NSAttributedString {
         guard let data = env.data.service(for: config) else { return missingConnectionTitle(config) }
+        let title: NSAttributedString
         switch config.kind {
-        case .stock(let stock): return stockTitle(stock, data: data)
-        case .asset(let asset): return assetTitle(asset, data: data)
+        case .stock(let stock): title = stockTitle(stock, data: data)
+        case .asset(let asset): title = assetTitle(asset, data: data)
         }
+        return dimmedIfClosed(title, config: config, data: data, env: env)
+    }
+
+    /// Fades the whole title, trend colors included, while every market the item follows
+    /// is closed and the general setting asks for it.
+    private static func dimmedIfClosed(_ title: NSAttributedString, config: MenuItemConfig,
+                                       data: MarketDataService?, env: AppEnvironment) -> NSAttributedString {
+        guard env.settings.dimClosedMarkets, let data, data.isClosed(config) else { return title }
+        let result = NSMutableAttributedString(attributedString: title)
+        let whole = NSRange(location: 0, length: result.length)
+        result.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
+            guard let color = value as? NSColor else { return }
+            result.addAttribute(.foregroundColor, value: color.withAlphaComponent(color.alphaComponent * 0.5), range: range)
+        }
+        return result
     }
 
     static func tooltip(for config: MenuItemConfig, env: AppEnvironment) -> String {
@@ -241,7 +257,7 @@ enum TitleRenderer {
             let pieces = stock.titleFormat.render { token in
                 TitlePiece(data.flatMap { stockValue(token, config: stock, data: $0) } ?? token.example)
             }
-            return attributed(pieces, signedColor: .white)
+            return dimmedIfClosed(attributed(pieces, signedColor: .white), config: config, data: data, env: env)
         case .asset(let asset):
             let summary = data.flatMap { assetSummary(asset, data: $0) }
             let pieces = asset.titleFormat.render { token in
@@ -249,7 +265,8 @@ enum TitleRenderer {
                 return live ?? TitlePiece(token.example, isSigned: token.isSigned)
             }
             let trend = summary.map { headlineTrend(asset, summary: $0) } ?? .up
-            return attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .white)
+            let title = attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .white)
+            return dimmedIfClosed(title, config: config, data: data, env: env)
         }
     }
 
