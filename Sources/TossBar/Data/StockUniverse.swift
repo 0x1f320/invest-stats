@@ -27,18 +27,15 @@ final class StockUniverse: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
 
-    private let client: TossAPIClient
     private var loadTask: Task<Void, Never>?
 
     private var cacheURL: URL {
         SecretStore.directory.appendingPathComponent("stock-universe.json")
     }
 
-    init(client: TossAPIClient) {
-        self.client = client
-    }
-
-    func ensureLoaded() {
+    /// Loads the list from the disk cache, or through `client` when the cache is stale.
+    /// Listings are the same for every Toss connection, so any one of them will do.
+    func ensureLoaded(using client: TossAPIClient) {
         guard entries.isEmpty, loadTask == nil else { return }
         if let data = try? Data(contentsOf: cacheURL),
            let cache = try? JSONDecoder().decode(DiskCache.self, from: data),
@@ -47,10 +44,10 @@ final class StockUniverse: ObservableObject {
             loadedMarkets = Self.markets.count
             return
         }
-        loadTask = Task { await load() }
+        loadTask = Task { await load(using: client) }
     }
 
-    private func load() async {
+    private func load(using client: TossAPIClient) async {
         isLoading = true
         errorMessage = nil
         loadedMarkets = 0

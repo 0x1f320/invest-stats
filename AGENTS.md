@@ -81,6 +81,7 @@ git push --force-with-lease origin <branch>
 | `swift scripts/make-icon.swift` | Redraws the app icon and writes `Resources/AppIcon.icns`; commit the result |
 | `scripts/release.sh package <version>` | Builds, signs, notarizes and zips a release; run by semantic-release in CI |
 | `TOSSBAR_DIAG=1 "build/Invest Stats.app/Contents/MacOS/TossBar"` | Prints each menu bar item's state and API errors every 3 s |
+| `TOSSBAR_SUPPORT_DIR=<dir> .build/debug/TossBar` | Runs a debug build against connections in `<dir>` instead of `~/Library/Application Support/TossBar/`, so it never migrates or edits the real ones. Run the bare executable: it has no bundle id, so its settings live in a separate `TossBar` defaults domain |
 
 - **CI:** `.github/workflows/ci.yml` runs on every PR and on pushes to `dev` and `main`. It builds, runs the tests, builds the release bundle, and uploads it as an artifact.
 - **Release tooling:** `package.json` holds only semantic-release and its plugins, pinned to exact versions. The app itself never depends on Node.
@@ -125,20 +126,25 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - The title is reassigned only when it changes.
 - **Menu bar text is white by default.** An asset item can opt into trend colors (`colorByTrend`), which color only its profit and rate by their sign, following the app's color convention. Labels, placeholders and stock items stay white.
 - **Asset title format:** `{profit}₩ ({rate}%)`, for example `+1,019,000₩ (+11.79%)`.
-- **Secrets live in user-only files by default,** not the login Keychain: `~/Library/Application Support/TossBar/`, with a `0700` directory and `0600` files.
+- **Connections hold the keys.** A connection is a provider plus its keys, and each item names the connection it reads from (`connectionID`; nil, in items saved before connections, means the first connection).
+  - Each connection has its own `TossAPIClient` and `MarketDataService`; one polling loop in `MarketDataHub` refreshes them all.
+  - `Provider` raw values are saved in each record, so keep them stable. A record with a provider the build doesn't know is skipped.
+  - The same keys can't be added twice, since two connections would revoke each other's token.
+- **Secrets live in user-only files by default,** not the login Keychain: `~/Library/Application Support/TossBar/`, with a `0700` directory and `0600` files. Each connection is one record, `connection.<uuid>`, next to its token, `access-token.<uuid>`.
   - **Why:** the login Keychain re-prompts after every ad-hoc re-sign.
-  - **iCloud Keychain is opt-in:** a toggle in the keys form moves the keys and the cached token to synchronizable items in the data protection keychain, so the user's other Macs can use them. Access comes from the signed keychain access group, so there are no prompts. Only release builds have that entitlement; ad-hoc builds show the toggle disabled.
-  - **The choice is per Mac** (`secretLocation` in `UserDefaults`). A Mac with no keys offers keys it finds in the iCloud Keychain instead of turning sync on by itself.
-  - **Leaving iCloud keeps the shared copy,** so other Macs keep working. Deleting the keys while synced deletes them everywhere, after a confirmation.
+  - **iCloud Keychain sync is opt-in and covers all connections at once.** The choice is per Mac (`secretLocation` in `UserDefaults`), and a Mac reads connections from that one place only. Turning it on moves every local connection and its token to synchronizable items in the data protection keychain and joins them with the other Macs' connections; a connection already in iCloud keeps the iCloud copy. Access comes from the signed keychain access group, so there are no prompts. Only release builds have that entitlement; ad-hoc builds show the toggle disabled.
+  - **Turning sync off copies the synced connections into local files and leaves the iCloud copies,** so the other Macs keep working. Deleting a connection while syncing deletes it on every Mac, after a confirmation.
+  - **A Mac that doesn't sync offers what it finds in the iCloud Keychain** instead of turning sync on by itself. Synced connections are looked for again when the app becomes active and every minute.
+  - **Keys from earlier versions** (`credentials` and `access-token`) become a connection once per Mac, with the same token, and existing items point at it. A Mac that synced moves them all to iCloud; one that didn't keeps its local keys local and leaves shared keys in iCloud for the offer above. The id is derived from the Client ID, so Macs that migrate the same synced keys don't duplicate the connection.
 - **Respect the API's limits:**
-  - Only one token per client is valid, so cache it. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
-  - Space requests per rate limit group.
-  - Batch price requests across all items.
-- **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data keeps loading.
+  - Only one token per client is valid, so cache it per connection. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
+  - Space requests per rate limit group, per connection.
+  - Batch price requests across all items of a connection.
+- **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.
 - **Updates come only from this repository's GitHub Releases.**
   - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.
   - It installs a download only if its signature satisfies the running app's designated requirement (same bundle id and Developer ID team) and its `TossBarReleaseVersion` matches the tag.
   - Local builds have no `TossBarReleaseVersion`, so they never update themselves.
 - **Bundle id `me.0x1f320.invest-stats` stays fixed.** Changing it resets user settings, the macOS "Allow in Menu Bar" entry and launch at login, and existing installs can't update across it.
   - It replaced `dev.tossbar.TossBar` when the app was renamed from TossBar to Invest Stats. `LegacyDefaults` copies that domain's settings once on first launch.
-- **Internal names keep "TossBar":** the SwiftPM target and executable, `TossBarReleaseVersion`, the `TOSSBAR_*` variables, `~/Library/Application Support/TossBar/`, the keychain service and the `TossBar.<uuid>` autosave names. Users don't see them, and renaming the last three would orphan saved keys and positions.
+- **Internal names keep "TossBar":** the SwiftPM target and executable, `TossBarReleaseVersion`, the `TOSSBAR_*` variables, `~/Library/Application Support/TossBar/`, the keychain service and the `TossBar.<uuid>` autosave names. Users don't see them, and renaming the last three would orphan saved connections and positions.

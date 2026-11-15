@@ -45,7 +45,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func update(_ config: MenuItemConfig) {
         guard config != self.config else { return }
-        let formatChanged = config.kind != self.config.kind
+        let formatChanged = config.kind != self.config.kind || config.connectionID != self.config.connectionID
         self.config = config
         // A different format (name shown, currency, …) needs a fresh width.
         if formatChanged { reservedWidth = 0 }
@@ -128,11 +128,13 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
         guard let button = statusItem.button else { return }
         let root: AnyView
-        switch config.kind {
-        case .stock:
-            root = AnyView(StockPopoverView(itemID: id, env: env))
-        case .asset:
-            root = AnyView(AssetPopoverView(itemID: id, env: env))
+        switch (config.kind, env.data.service(for: config)) {
+        case (_, nil):
+            root = AnyView(MissingConnectionPopoverView(itemID: id, env: env))
+        case (.stock, let data?):
+            root = AnyView(StockPopoverView(itemID: id, env: env, data: data))
+        case (.asset, let data?):
+            root = AnyView(AssetPopoverView(itemID: id, env: env, data: data))
         }
         let host = NSHostingController(rootView: root)
         host.sizingOptions = .preferredContentSize
@@ -185,22 +187,36 @@ enum TitleRenderer {
     static var font: NSFont { NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular) }
 
     static func title(for config: MenuItemConfig, env: AppEnvironment) -> NSAttributedString {
+        guard let data = env.data.service(for: config) else { return missingConnectionTitle(config) }
         switch config.kind {
-        case .stock(let stock): return stockTitle(stock, env: env)
-        case .asset(let asset): return assetTitle(asset, env: env)
+        case .stock(let stock): return stockTitle(stock, data: data)
+        case .asset(let asset): return assetTitle(asset, data: data)
         }
     }
 
     static func tooltip(for config: MenuItemConfig, env: AppEnvironment) -> String {
+        guard let connection = env.connections.resolve(config.connectionID),
+              let data = env.data.service(for: config)
+        else { return "\(config.typeTitle) · 연결을 찾을 수 없습니다. 설정에서 이 항목의 연결을 지정하세요." }
         switch config.kind {
         case .stock(let stock):
-            let name = env.data.stockInfo[stock.symbol]?.name ?? stock.symbol
-            return "주가 · \(name) (\(stock.symbol))"
+            let name = data.stockInfo[stock.symbol]?.name ?? stock.symbol
+            return "주가 · \(name) (\(stock.symbol)) · \(connection.connection.displayName)"
         case .asset(let asset):
-            let seq = env.data.accountSeq(for: asset)
-            let account = env.data.accounts.first { $0.accountSeq == seq }?.maskedNumber ?? "기본 계좌"
-            return "자산 · \(account) · \(asset.mode.title) · \(asset.usesAfterCost ? "수수료·세금 제외" : "원본 수익")"
+            let seq = data.accountSeq(for: asset)
+            let account = data.accounts.first { $0.accountSeq == seq }?.maskedNumber ?? "기본 계좌"
+            return "자산 · \(connection.connection.displayName) · \(account) · \(asset.mode.title) · \(asset.usesAfterCost ? "수수료·세금 제외" : "원본 수익")"
         }
+    }
+
+    /// An item whose connection was deleted, or hasn't synced to this Mac yet.
+    private static func missingConnectionTitle(_ config: MenuItemConfig) -> NSAttributedString {
+        let prefix: String?
+        switch config.kind {
+        case .stock(let stock): prefix = stock.showName ? (stock.displayName?.nilIfBlank ?? stock.symbol) : stock.symbol
+        case .asset(let asset): prefix = asset.label.nilIfBlank ?? "자산"
+        }
+        return attributed([prefix, "⚠︎"].compactMap { $0 }.joined(separator: " "))
     }
 
     /// Menu bar text is white unless an asset item opts into trend colors.
@@ -208,8 +224,7 @@ enum TitleRenderer {
         NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
     }
 
-    private static func stockTitle(_ config: StockItemConfig, env: AppEnvironment) -> NSAttributedString {
-        let data = env.data
+    private static func stockTitle(_ config: StockItemConfig, data: MarketDataService) -> NSAttributedString {
         let result = NSMutableAttributedString()
         if config.showName {
             var name = config.displayName?.nilIfBlank ?? data.stockInfo[config.symbol]?.name ?? config.symbol
@@ -236,8 +251,7 @@ enum TitleRenderer {
     }
 
     /// Format from the spec: `{profit}₩ ({rate}%)`, e.g. `+1,019,000₩ (+11.79%)`.
-    private static func assetTitle(_ config: AssetItemConfig, env: AppEnvironment) -> NSAttributedString {
-        let data = env.data
+    private static func assetTitle(_ config: AssetItemConfig, data: MarketDataService) -> NSAttributedString {
         let result = NSMutableAttributedString()
         if let label = config.label.nilIfBlank {
             result.append(attributed(label + " "))

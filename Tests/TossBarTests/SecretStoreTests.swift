@@ -5,7 +5,7 @@ import Testing
 @Suite("Secret storage")
 struct SecretStoreTests {
     @Test func locationDefaultsToLocal() {
-        // Existing installs have no saved choice and must keep reading their local files.
+        // Installs that never turned on iCloud keep their connections in local files.
         #expect(SecretLocation.parse(nil) == .local)
         #expect(SecretLocation.parse("") == .local)
         #expect(SecretLocation.parse("somethingElse") == .local)

@@ -19,7 +19,7 @@ enum TossAPIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingCredentials:
-            return "API 키가 설정되지 않았습니다. 설정에서 Client ID/Secret 을 입력하세요."
+            return "API 키가 설정되지 않았습니다. 설정 > 연결에서 Client ID/Secret 을 입력하세요."
         case .oauth(let code, let description):
             switch code {
             case "invalid_client": return "Client ID 또는 Secret 이 올바르지 않습니다."
@@ -69,30 +69,35 @@ enum CandleInterval: String {
     case day = "1d"
 }
 
-/// Client for the Toss Securities OpenAPI.
+/// Client for the Toss Securities OpenAPI. Each connection has its own client, with its
+/// own keys, token and request spacing.
 ///
-/// - Only one access token per client is valid at a time, so the token is cached in the
-///   secret store and reused across launches instead of being reissued. When the keys are
-///   shared through the iCloud Keychain, another Mac may have replaced it, so a rejected
-///   token is first swapped for the stored one before a new token is issued.
+/// - Only one access token per client is valid at a time, so the token is cached next to
+///   the connection and reused across launches instead of being reissued. When the
+///   connection syncs through the iCloud Keychain, another Mac may have replaced it, so a
+///   rejected token is first swapped for the stored one before a new token is issued.
 /// - Requests are spaced per rate limit group to avoid 429s up front. On a 429 the client
 ///   waits for `Retry-After` and retries. On a 401 it drops the token and retries once.
 actor TossAPIClient {
-    static let shared = TossAPIClient()
+    let connectionID: UUID
 
     private let baseURL = "https://openapi.tossinvest.com"
     private let session: URLSession
     private let decoder = TossAPIClient.makeDecoder()
 
-    private var credentialsLoaded = false
     private var credentials: Credentials?
+    /// Where the connection, and so its cached token, is kept.
+    private var location: SecretLocation
     private var token: CachedToken?
     private var tokenTask: Task<CachedToken, Error>?
     /// The last token the server rejected, so it is not picked up again from the store.
     private var rejectedToken: String?
     private var nextSlot: [RateGroup: Date] = [:]
 
-    init() {
+    init(connectionID: UUID, credentials: Credentials?, location: SecretLocation) {
+        self.connectionID = connectionID
+        self.credentials = credentials
+        self.location = location
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 15
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -114,44 +119,37 @@ actor TossAPIClient {
     // MARK: Credentials
 
     func hasCredentials() -> Bool {
-        loadCredentialsIfNeeded()
-        return credentials != nil
+        credentials != nil
     }
 
-    func updateCredentials(_ newValue: Credentials?) {
-        credentialsLoaded = true
-        if newValue != credentials {
-            token = nil
-            rejectedToken = nil
-            // Keep a stored token issued for the same client ID: it is still valid, and it may
-            // be the one another Mac shared through the iCloud Keychain.
-            if let stored = CachedToken.load(), stored.clientId != newValue?.clientId {
-                CachedToken.clear()
-            }
+    /// Applies edited keys, or a move of the connection between this Mac and iCloud.
+    func update(credentials newValue: Credentials?, location newLocation: SecretLocation) {
+        location = newLocation
+        guard newValue != credentials else { return }
+        token = nil
+        rejectedToken = nil
+        // Keep a stored token issued for the same client ID: it is still valid, and it may
+        // be the one another Mac shared through the iCloud Keychain.
+        if let stored = storedToken(), stored.clientId != newValue?.clientId {
+            CachedToken.clear(connection: connectionID, from: location)
         }
         credentials = newValue
     }
 
-    private func loadCredentialsIfNeeded() {
-        guard !credentialsLoaded else { return }
-        credentialsLoaded = true
-        credentials = Credentials.load()
-        if let credentials, let cached = CachedToken.load(), cached.isUsable(for: credentials.clientId) {
-            token = cached
-        }
+    private func storedToken() -> CachedToken? {
+        CachedToken.load(connection: connectionID, from: location)
     }
 
     // MARK: Token
 
     private func accessToken() async throws -> String {
-        loadCredentialsIfNeeded()
         guard let credentials else { throw TossAPIError.missingCredentials }
         if let token, token.isUsable(for: credentials.clientId) {
             return token.accessToken
         }
-        // Another Mac sharing the keys may have stored a newer token. Using it avoids
-        // issuing one more, which would revoke the token that Mac is using.
-        if let stored = CachedToken.load(), stored.isUsable(for: credentials.clientId),
+        // A token saved by an earlier launch, or by another Mac sharing the connection.
+        // Using it avoids issuing one more, which would revoke the token in use elsewhere.
+        if let stored = storedToken(), stored.isUsable(for: credentials.clientId),
            stored.accessToken != rejectedToken {
             token = stored
             return stored.accessToken
@@ -165,7 +163,7 @@ actor TossAPIClient {
         defer { tokenTask = nil }
         let issued = try await task.value
         token = issued
-        CachedToken.save(issued)
+        CachedToken.save(issued, connection: connectionID, to: location)
         return issued.accessToken
     }
 
@@ -176,8 +174,8 @@ actor TossAPIClient {
         if token?.accessToken == used {
             token = nil
         }
-        if CachedToken.load()?.accessToken == used {
-            CachedToken.clear()
+        if storedToken()?.accessToken == used {
+            CachedToken.clear(connection: connectionID, from: location)
         }
     }
 
