@@ -11,7 +11,7 @@ Rules for anyone, human or agent, working in this repository. `CLAUDE.md` import
 
 - **Conventional Commits:** use `type(scope): summary`.
   - Common types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `ci`, `chore`.
-  - Scopes in use: `api`, `stock`, `asset`. Omit the scope when a change spans areas.
+  - **Scope:** always give one when the change fits a single area. Scopes in use: `api`, `stock`, `asset`; name a new one when none fits, such as `connection`, `settings`, `release` or `agents`. Omit the scope only when a change genuinely spans several areas.
 - **Summary:** imperative and lowercase, with no trailing period.
 - **Body:** explains what changed and why.
 - **First commit:** the history starts with `chore: initial commit` on `main`. Leave it as is.
