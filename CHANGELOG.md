@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-dev.8](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.7...v1.0.0-dev.8) (2026-11-15)
+
+### Features
+
+* manage multiple connections and pick one per item ([#22](https://github.com/0x1f320/invest-stats/issues/22)) ([d634eec](https://github.com/0x1f320/invest-stats/commit/d634eec18052bbea7242f547857af6de8ae7e76e))
+
 ## [1.0.0-dev.7](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.6...v1.0.0-dev.7) (2026-11-15)
 
 ### Bug Fixes
