@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0-dev.5](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.4...v1.1.0-dev.5) (2026-11-15)
+
+### Features
+
+* **alerts:** evaluate price alert conditions with re-arming ([#32](https://github.com/0x1f320/invest-stats/issues/32)) ([db2bf8a](https://github.com/0x1f320/invest-stats/commit/db2bf8acb834d4737adb8ed0e26a97963e4cf7eb))
+* **alerts:** notify price alerts and set them per item ([#33](https://github.com/0x1f320/invest-stats/issues/33)) ([4c09287](https://github.com/0x1f320/invest-stats/commit/4c09287c8745f9f2d52828725023af5eae6779e5)), closes [#32](https://github.com/0x1f320/invest-stats/issues/32)
+
 ## [1.1.0-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.3...v1.1.0-dev.4) (2026-11-15)
 
 ### Features
