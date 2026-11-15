@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-dev.9](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.8...v1.0.0-dev.9) (2026-11-15)
+
+### Features
+
+* edit items in their own settings windows ([#23](https://github.com/0x1f320/invest-stats/issues/23)) ([d593428](https://github.com/0x1f320/invest-stats/commit/d593428d07f3415320bf68df3e6c6b0260711d57))
+
 ## [1.0.0-dev.8](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.7...v1.0.0-dev.8) (2026-11-15)
 
 ### Features
