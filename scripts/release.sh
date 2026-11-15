@@ -44,10 +44,17 @@ package() {
   verify
 
   # macOS wants x.y.z here, so a prerelease such as 1.2.0-dev.3 becomes 1.2.0.
-  # The build number tells prereleases apart.
+  # The build number tells prereleases apart, and TossBarReleaseVersion keeps the full
+  # version for the in-app updater.
   TOSSBAR_VERSION="${version%%-*}" \
+  TOSSBAR_RELEASE_VERSION="$version" \
   TOSSBAR_BUILD_NUMBER="${GITHUB_RUN_NUMBER:-1}" \
     "$ROOT/scripts/build-app.sh" release
+
+  if [[ "$(/usr/libexec/PlistBuddy -c "Print :TossBarReleaseVersion" "$APP/Contents/Info.plist")" != "$version" ]]; then
+    echo "The bundle's TossBarReleaseVersion is not $version." >&2
+    exit 1
+  fi
 
   # Without the keychain access group, the iCloud Keychain option would silently disappear.
   if ! codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q keychain-access-groups; then

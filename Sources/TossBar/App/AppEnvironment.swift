@@ -11,6 +11,7 @@ final class AppEnvironment: ObservableObject {
     let credentials: CredentialStore
     let data: MarketDataService
     let universe: StockUniverse
+    let updater: Updater
 
     var openSettings: () -> Void = {}
 
@@ -23,6 +24,7 @@ final class AppEnvironment: ObservableObject {
         credentials = CredentialStore(client: client)
         data = MarketDataService(client: client, store: store, settings: settings)
         universe = StockUniverse(client: client)
+        updater = Updater()
         credentials.onChange = { [weak self] in self?.data.reset() }
     }
 

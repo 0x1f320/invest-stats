@@ -6,6 +6,10 @@
 # Optional environment:
 #   TOSSBAR_VERSION        CFBundleShortVersionString (x.y.z). Defaults to Info.plist.
 #   TOSSBAR_BUILD_NUMBER   CFBundleVersion. Defaults to Info.plist.
+#   TOSSBAR_RELEASE_VERSION
+#                          Full release version, such as 1.2.0-dev.3, stored as
+#                          TossBarReleaseVersion. The in-app updater compares it with GitHub
+#                          Releases; builds without it never update themselves.
 #   TOSSBAR_SIGN_IDENTITY  Code signing identity. Defaults to "-" (ad-hoc). Any other
 #                          identity signs with the hardened runtime and a secure
 #                          timestamp, which notarization requires.
@@ -36,6 +40,9 @@ cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 PLIST="$APP/Contents/Info.plist"
 if [[ -n "${TOSSBAR_VERSION:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $TOSSBAR_VERSION" "$PLIST"
+fi
+if [[ -n "${TOSSBAR_RELEASE_VERSION:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Add :TossBarReleaseVersion string $TOSSBAR_RELEASE_VERSION" "$PLIST"
 fi
 if [[ -n "${TOSSBAR_BUILD_NUMBER:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $TOSSBAR_BUILD_NUMBER" "$PLIST"
