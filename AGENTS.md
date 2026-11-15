@@ -76,6 +76,7 @@ git push --force-with-lease origin <branch>
 | `swift build` | Debug build |
 | `scripts/test.sh` | Swift Testing suite; works with only the Command Line Tools installed |
 | `scripts/build-app.sh [release\|debug]` | Builds and ad-hoc signs `build/TossBar.app`; `TOSSBAR_SIGN_IDENTITY` signs with a real identity instead |
+| `swift scripts/make-icon.swift` | Redraws the app icon and writes `Resources/AppIcon.icns`; commit the result |
 | `scripts/release.sh package <version>` | Builds, signs, notarizes and zips a release; run by semantic-release in CI |
 | `TOSSBAR_DIAG=1 build/TossBar.app/Contents/MacOS/TossBar` | Prints each menu bar item's state and API errors every 3 s |
 
