@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.3...v1.1.0-dev.4) (2026-11-15)
+
+### Features
+
+* **indicator:** chart indices and bond yields in the popover ([#36](https://github.com/0x1f320/invest-stats/issues/36)) ([f107031](https://github.com/0x1f320/invest-stats/commit/f10703189ff5c83a627c29c3210872e4ed7c0543)), closes [#35](https://github.com/0x1f320/invest-stats/issues/35)
+
 ## [1.1.0-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.2...v1.1.0-dev.3) (2026-11-15)
 
 ### Features
