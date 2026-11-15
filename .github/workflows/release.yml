@@ -35,10 +35,11 @@ jobs:
       - name: Test
         run: scripts/test.sh
 
-      - name: Import signing certificate and notary key
+      - name: Import signing certificate, provisioning profile and notary key
         env:
           MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_PROVISION_PROFILE_BASE64: ${{ secrets.MACOS_PROVISION_PROFILE_BASE64 }}
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -61,12 +62,16 @@ jobs:
             exit 1
           fi
 
+          PROFILE="$RUNNER_TEMP/TossBar.provisionprofile"
+          echo "$MACOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE"
+
           ASC_KEY_PATH="$RUNNER_TEMP/notary_key.p8"
           echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$ASC_KEY_PATH"
 
           {
             echo "TOSSBAR_SIGN_IDENTITY=$IDENTITY"
             echo "TOSSBAR_KEYCHAIN=$KEYCHAIN"
+            echo "TOSSBAR_PROVISION_PROFILE=$PROFILE"
             echo "ASC_KEY_PATH=$ASC_KEY_PATH"
           } >> "$GITHUB_ENV"
 
@@ -92,8 +97,8 @@ jobs:
             --body "Brings the \`v$VERSION\` release tag into \`dev\`'s history so the next prerelease is computed from it. Opened and merged by the release workflow.")"
           gh pr merge "$URL" --merge --subject "$TITLE"
 
-      - name: Remove signing keychain and notary key
+      - name: Remove signing keychain, provisioning profile and notary key
         if: always()
         run: |
           if [[ -n "${TOSSBAR_KEYCHAIN:-}" ]]; then security delete-keychain "$TOSSBAR_KEYCHAIN" || true; fi
-          rm -f "${ASC_KEY_PATH:-}"
+          rm -f "${ASC_KEY_PATH:-}" "${TOSSBAR_PROVISION_PROFILE:-}"

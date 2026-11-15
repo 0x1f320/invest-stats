@@ -59,7 +59,9 @@ scripts/test.sh
 
 1. **Register a client:** in Toss Securities WTS (the PC web app), open 설정 > Open API and register a client. Add this Mac's public IP to the allowed IPs; requests from other IPs fail with 403.
 2. **Enter the keys:** enter the Client ID and Secret in the window that opens on first launch, then click **저장 및 연결 테스트** (save and test).
-3. **Storage:** the keys are stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). They are not stored in the Keychain, so rebuilding the app never asks for your password.
+3. **Storage:** by default the keys are stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). They are not stored in the login Keychain, so rebuilding the app never asks for your password.
+   - **Share with your other Macs:** in release builds, turn on **iCloud 키체인에 저장해 같은 Apple 계정의 다른 Mac 과 공유** before saving. The keys and the cached token move to the iCloud Keychain. On another Mac signed in to the same Apple Account, TossBar offers the shared keys on first launch.
+   - Each Mac still needs its public IP in the client's allowed IPs.
 4. **Use a dedicated client:** Toss Securities keeps only one valid token per client. If another tool uses the same keys, each will keep invalidating the other's token.
 
 ## Troubleshooting

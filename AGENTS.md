@@ -93,10 +93,11 @@ git push --force-with-lease origin <branch>
 - **`main` publishes releases** such as `v1.2.0`.
 - **Nothing is committed back:** the version lives only in the tag. `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, and `CFBundleVersion` gets the workflow run number.
 - **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
+- **Provisioning profile:** release builds embed the "TossBar Developer ID" profile for App ID `dev.tossbar.TossBar` and are signed with `Resources/TossBar.entitlements`, which grants the keychain access group for the iCloud Keychain. `scripts/release.sh` fails if the signed app lacks that entitlement. The profile expires with the Developer ID certificate; regenerate it in the developer portal whenever the certificate is renewed.
 - **Back-merge:** a release tag on `main` sits on a merge commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
-- **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8_BASE64`. A missing secret fails the release before any tag is created.
+- **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_PROVISION_PROFILE_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8_BASE64`. A missing secret fails the release before any tag is created.
   - The `.p12` must use legacy encryption (`openssl pkcs12 -export -legacy`), because `security import` rejects OpenSSL 3's default algorithms.
-  - The App Store Connect API key needs only the Developer role.
+  - The App Store Connect API key needs only the Developer role. That role can download profiles but not create App IDs or profiles; do that in the developer portal.
 - **Repository setting:** "Allow GitHub Actions to create and approve pull requests" must stay on for the back-merge.
 
 ## Design invariants
@@ -117,10 +118,13 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - The title is reassigned only when it changes.
 - **Menu bar text is white by default.** An asset item can opt into trend colors (`colorByTrend`), which color only its profit and rate by their sign, following the app's color convention. Labels, placeholders and stock items stay white.
 - **Asset title format:** `{profit}₩ ({rate}%)`, for example `+1,019,000₩ (+11.79%)`.
-- **Secrets live in user-only files,** not the Keychain: `~/Library/Application Support/TossBar/`, with a `0700` directory and `0600` files.
-  - **Why:** the Keychain re-prompts after every ad-hoc re-sign.
+- **Secrets live in user-only files by default,** not the login Keychain: `~/Library/Application Support/TossBar/`, with a `0700` directory and `0600` files.
+  - **Why:** the login Keychain re-prompts after every ad-hoc re-sign.
+  - **iCloud Keychain is opt-in:** a toggle in the keys form moves the keys and the cached token to synchronizable items in the data protection keychain, so the user's other Macs can use them. Access comes from the signed keychain access group, so there are no prompts. Only release builds have that entitlement; ad-hoc builds show the toggle disabled.
+  - **The choice is per Mac** (`secretLocation` in `UserDefaults`). A Mac with no keys offers keys it finds in the iCloud Keychain instead of turning sync on by itself.
+  - **Leaving iCloud keeps the shared copy,** so other Macs keep working. Deleting the keys while synced deletes them everywhere, after a confirmation.
 - **Respect the API's limits:**
-  - Only one token per client is valid, so cache it.
+  - Only one token per client is valid, so cache it. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
   - Space requests per rate limit group.
   - Batch price requests across all items.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data keeps loading.

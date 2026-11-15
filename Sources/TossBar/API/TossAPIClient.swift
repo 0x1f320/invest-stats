@@ -71,8 +71,10 @@ enum CandleInterval: String {
 
 /// Client for the Toss Securities OpenAPI.
 ///
-/// - Only one access token per client is valid at a time, so the token is cached in a
-///   user-only file and reused across launches instead of being reissued.
+/// - Only one access token per client is valid at a time, so the token is cached in the
+///   secret store and reused across launches instead of being reissued. When the keys are
+///   shared through the iCloud Keychain, another Mac may have replaced it, so a rejected
+///   token is first swapped for the stored one before a new token is issued.
 /// - Requests are spaced per rate limit group to avoid 429s up front. On a 429 the client
 ///   waits for `Retry-After` and retries. On a 401 it drops the token and retries once.
 actor TossAPIClient {
@@ -86,6 +88,8 @@ actor TossAPIClient {
     private var credentials: Credentials?
     private var token: CachedToken?
     private var tokenTask: Task<CachedToken, Error>?
+    /// The last token the server rejected, so it is not picked up again from the store.
+    private var rejectedToken: String?
     private var nextSlot: [RateGroup: Date] = [:]
 
     init() {
@@ -118,7 +122,12 @@ actor TossAPIClient {
         credentialsLoaded = true
         if newValue != credentials {
             token = nil
-            CachedToken.clear()
+            rejectedToken = nil
+            // Keep a stored token issued for the same client ID: it is still valid, and it may
+            // be the one another Mac shared through the iCloud Keychain.
+            if let stored = CachedToken.load(), stored.clientId != newValue?.clientId {
+                CachedToken.clear()
+            }
         }
         credentials = newValue
     }
@@ -127,7 +136,7 @@ actor TossAPIClient {
         guard !credentialsLoaded else { return }
         credentialsLoaded = true
         credentials = Credentials.load()
-        if let cached = CachedToken.load(), cached.clientId == credentials?.clientId {
+        if let credentials, let cached = CachedToken.load(), cached.isUsable(for: credentials.clientId) {
             token = cached
         }
     }
@@ -137,8 +146,15 @@ actor TossAPIClient {
     private func accessToken() async throws -> String {
         loadCredentialsIfNeeded()
         guard let credentials else { throw TossAPIError.missingCredentials }
-        if let token, token.clientId == credentials.clientId, token.expiresAt > Date().addingTimeInterval(60) {
+        if let token, token.isUsable(for: credentials.clientId) {
             return token.accessToken
+        }
+        // Another Mac sharing the keys may have stored a newer token. Using it avoids
+        // issuing one more, which would revoke the token that Mac is using.
+        if let stored = CachedToken.load(), stored.isUsable(for: credentials.clientId),
+           stored.accessToken != rejectedToken {
+            token = stored
+            return stored.accessToken
         }
         // Concurrent callers share one in-flight token request.
         if let tokenTask {
@@ -154,11 +170,15 @@ actor TossAPIClient {
     }
 
     /// Drops the token only if it is still the one that failed, so a token that another
-    /// request has already refreshed is kept.
+    /// request, or another Mac, has already refreshed is kept.
     private func invalidateToken(_ used: String) {
-        guard token?.accessToken == used else { return }
-        token = nil
-        CachedToken.clear()
+        rejectedToken = used
+        if token?.accessToken == used {
+            token = nil
+        }
+        if CachedToken.load()?.accessToken == used {
+            CachedToken.clear()
+        }
     }
 
     private func issueToken(_ credentials: Credentials) async throws -> CachedToken {
