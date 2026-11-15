@@ -143,6 +143,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Space requests per rate limit group, per connection.
   - Batch price requests across all items of a connection.
   - Market calendars (`MarketCalendar`) are cached per connection and market, and fetched again only every 6 hours, once the next business day starts, or 5 minutes after a failure.
+  - While every market a connection's items follow is closed, the polling loop refreshes it every 5 minutes (`PollingPolicy`). Anything unknown counts as open, so a missing calendar never slows polling.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.
 - **Updates come only from this repository's GitHub Releases.**
   - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.

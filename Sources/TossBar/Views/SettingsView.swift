@@ -215,7 +215,7 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                Text("데이터 출처: 각 연결의 증권사 Open API (REST). 시세는 갱신 주기마다 연결별로 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다.")
+                Text("데이터 출처: 각 연결의 증권사 Open API (REST). 시세는 갱신 주기마다 연결별로 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다. 항목들이 따르는 시장이 모두 닫혀 있으면 5분마다 조회하고, 장이 열리면 갱신 주기로 돌아갑니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Invest Stats 종료") { env.quit() }
             }
