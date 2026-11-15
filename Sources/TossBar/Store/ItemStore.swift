@@ -98,9 +98,45 @@ extension AssetItemConfig {
     }
 }
 
+struct IndicatorItemConfig: Codable, Hashable {
+    /// A `MarketIndicator.catalog` symbol, such as `KOSPI` or `USD_KRW`.
+    var symbol: String
+    /// Name shown in the menu bar. nil uses the indicator's name.
+    var displayName: String?
+    var showName: Bool = true
+    /// Shows the change since the previous close. The exchange rate has none to show.
+    var showChange: Bool = true
+    /// Custom menu bar format, such as `%n %p (%a)`. nil uses `defaultFormat`, which follows
+    /// `showName` and `showChange`. See `TitleFormat`.
+    var format: String?
+
+    /// nil for a symbol this build doesn't know.
+    var indicator: MarketIndicator? { MarketIndicator.find(symbol) }
+}
+
+extension IndicatorItemConfig {
+    private enum CodingKeys: String, CodingKey {
+        case symbol, displayName, showName, showChange, format
+    }
+
+    /// Fills defaults for keys that older saved configs don't have.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        symbol = try c.decode(String.self, forKey: .symbol)
+        displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        showName = try c.decodeIfPresent(Bool.self, forKey: .showName) ?? true
+        showChange = try c.decodeIfPresent(Bool.self, forKey: .showChange) ?? true
+        format = try c.decodeIfPresent(String.self, forKey: .format)
+    }
+}
+
+/// An item's kind and settings. Saved as `{"<case>": {"_0": {...}}}`, so a new case leaves
+/// the items saved before it as they are.
 enum ItemKind: Codable, Hashable {
     case stock(StockItemConfig)
     case asset(AssetItemConfig)
+    /// A market index, bond yield or the USD/KRW base rate.
+    case indicator(IndicatorItemConfig)
 }
 
 /// One menu bar item. Each config becomes its own `NSStatusItem`.
@@ -115,6 +151,7 @@ struct MenuItemConfig: Codable, Hashable, Identifiable {
         switch kind {
         case .stock: return "주가"
         case .asset: return "자산"
+        case .indicator: return "지표"
         }
     }
 }
@@ -147,6 +184,25 @@ extension Array where Element == MenuItemConfig {
     var needsUsdKrwForStocks: Bool {
         contains {
             if case .stock(let config) = $0.kind { return config.displayCurrency == .krw }
+            return false
+        }
+    }
+
+    /// Symbols of indicator items that the market indicator API serves, without duplicates.
+    /// The exchange rate is left out; it comes with the USD/KRW rate.
+    var indicatorSymbols: [String] {
+        var seen = Set<String>()
+        return compactMap {
+            guard case .indicator(let config) = $0.kind, config.indicator?.isMarketIndicator == true,
+                  seen.insert(config.symbol).inserted else { return nil }
+            return config.symbol
+        }
+    }
+
+    /// Whether any indicator item shows the USD/KRW base rate.
+    var needsUsdKrwForIndicators: Bool {
+        contains {
+            if case .indicator(let config) = $0.kind { return config.indicator?.category == .exchangeRate }
             return false
         }
     }
@@ -213,6 +269,11 @@ final class ItemStore: ObservableObject {
         return nil
     }
 
+    func indicatorConfig(_ id: UUID) -> IndicatorItemConfig? {
+        if case .indicator(let config)? = item(id)?.kind { return config }
+        return nil
+    }
+
     /// Changes a stock item's config in place, as the item settings window does on every
     /// edit. Does nothing for a missing or non-stock item, or when nothing changes.
     func updateStock(_ id: UUID, _ change: (inout StockItemConfig) -> Void) {
@@ -226,6 +287,13 @@ final class ItemStore: ObservableObject {
         guard var config = assetConfig(id) else { return }
         change(&config)
         replaceKind(of: id, with: .asset(config))
+    }
+
+    /// Changes an indicator item's config in place. See `updateStock`.
+    func updateIndicator(_ id: UUID, _ change: (inout IndicatorItemConfig) -> Void) {
+        guard var config = indicatorConfig(id) else { return }
+        change(&config)
+        replaceKind(of: id, with: .indicator(config))
     }
 
     /// Points an item at another connection. An asset item's account belongs to its old

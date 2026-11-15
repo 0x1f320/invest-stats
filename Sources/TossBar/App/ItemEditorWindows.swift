@@ -8,6 +8,8 @@ enum EditorTarget {
     case newStock
     /// The dialog that adds an asset item.
     case newAsset
+    /// The dialog that adds an indicator item.
+    case newIndicator
     /// An existing item's settings window.
     case item(UUID)
 
@@ -15,6 +17,7 @@ enum EditorTarget {
         switch self {
         case .newStock: return "newStock"
         case .newAsset: return "newAsset"
+        case .newIndicator: return "newIndicator"
         case .item(let id): return "item.\(id.uuidString)"
         }
     }
@@ -79,6 +82,8 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
             return makeDialog(title: "주가 항목 추가", StockAddDialog(env: env, cancel: close, added: added))
         case .newAsset:
             return makeDialog(title: "자산 항목 추가", AssetAddDialog(env: env, cancel: close, added: added))
+        case .newIndicator:
+            return makeDialog(title: "지표 항목 추가", IndicatorAddDialog(env: env, cancel: close, added: added))
         case .item(let id):
             guard let item = env.store.item(id) else { return nil }
             let tabs = ToolbarTabController(tabs: settingsTabs(for: item))
@@ -126,6 +131,15 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
                     AssetDisplayPane(env: env, id: id)
                 },
             ]
+        case .indicator:
+            return [
+                ToolbarTab("indicator", "지표", symbol: "chart.line.uptrend.xyaxis") {
+                    IndicatorSourcePane(env: env, id: id)
+                },
+                ToolbarTab("display", "표시", symbol: "menubar.rectangle") {
+                    IndicatorDisplayPane(env: env, id: id)
+                },
+            ]
         }
     }
 
@@ -140,6 +154,8 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
             return "주가 · \(name)"
         case .asset(let config):
             return "자산" + (config.label.nilIfBlank.map { " · \($0)" } ?? "")
+        case .indicator(let config):
+            return "지표 · \(config.displayName?.nilIfBlank ?? config.indicator?.name ?? config.symbol)"
         }
     }
 

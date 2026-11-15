@@ -93,6 +93,10 @@ final class MarketDataService: ObservableObject {
     @Published private(set) var usdKrw: ExchangeRate?
     /// Trading hours of the markets the items use. See `MarketCalendar.needsRefresh`.
     @Published private(set) var calendars: [MarketRegion: MarketCalendar] = [:]
+    /// Market indicator values and their latest daily candles (newest first), by symbol.
+    @Published private(set) var indicatorQuotes: [String: MarketIndicatorQuote] = [:]
+    @Published private(set) var indicatorDaily: [String: (fetchedAt: Date, candles: [MarketIndicatorCandle])] = [:]
+    @Published private(set) var indicatorErrors: [String: String] = [:]
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published private(set) var symbolErrors: [String: String] = [:]
@@ -128,6 +132,9 @@ final class MarketDataService: ObservableObject {
         usdKrw = nil
         calendars = [:]
         lastCalendarAttempt = [:]
+        indicatorQuotes = [:]
+        indicatorDaily = [:]
+        indicatorErrors = [:]
         lastFxFetch = nil
         lastAccountsFetch = nil
         errorMessage = nil
@@ -196,6 +203,19 @@ final class MarketDataService: ObservableObject {
         case .asset(let config):
             guard let seq = accountSeq(for: config), let overview = holdings[seq] else { return nil }
             return overview.regions
+        case .indicator(let config):
+            switch config.indicator?.category {
+            case .index, .bond:
+                // KOSPI, KOSDAQ and the government bond yields are quoted in KRX hours.
+                return [.kr]
+            case .exchangeRate:
+                // The rate updates every minute and follows no market's hours. nil counts
+                // as open, so the connection is never idle (`PollingPolicy`).
+                return nil
+            case nil:
+                // An unsupported symbol has nothing to refresh.
+                return []
+            }
         }
     }
 
@@ -279,8 +299,9 @@ final class MarketDataService: ObservableObject {
             }
         }
 
-        // 4) USD/KRW rate for US holdings and stock items shown in KRW, cached for a minute.
-        if !assetConfigs.isEmpty || items.needsUsdKrwForStocks,
+        // 4) USD/KRW rate for US holdings, stock items shown in KRW and the exchange rate
+        //    indicator, cached for a minute (the API updates it every minute).
+        if !assetConfigs.isEmpty || items.needsUsdKrwForStocks || items.needsUsdKrwForIndicators,
            lastFxFetch.map({ Date().timeIntervalSince($0) > 60 }) ?? true {
             do {
                 usdKrw = try await client.usdKrwRate()
@@ -320,11 +341,59 @@ final class MarketDataService: ObservableObject {
                 continue
             }
         }
+        // 7) Market indicators: one request for all of them, then their previous close.
+        errors += await refreshIndicators(items.indicatorSymbols)
 
         errorMessage = errors.first
-        if errors.isEmpty || !quotes.isEmpty || !holdings.isEmpty {
+        if errors.isEmpty || !quotes.isEmpty || !holdings.isEmpty || !indicatorQuotes.isEmpty {
             lastUpdated = Date()
         }
+    }
+
+    /// Refreshes the market indicator values and, every 2 minutes, the two latest daily
+    /// candles for the previous close. Returns the errors to show.
+    private func refreshIndicators(_ symbols: [String]) async -> [String] {
+        guard !symbols.isEmpty else { return [] }
+        var errors: [String] = []
+        do {
+            for quote in try await client.indicatorPrices(symbols) {
+                indicatorQuotes[quote.symbol] = quote
+            }
+            symbols.forEach { indicatorErrors[$0] = nil }
+        } catch {
+            // A failed batch doesn't say which symbol is bad, so retry one by one.
+            for symbol in symbols {
+                do {
+                    if let quote = try await client.indicatorPrices([symbol]).first {
+                        indicatorQuotes[symbol] = quote
+                        indicatorErrors[symbol] = nil
+                    }
+                } catch {
+                    indicatorErrors[symbol] = error.localizedDescription
+                }
+            }
+            errors.append(error.localizedDescription)
+        }
+
+        for symbol in symbols {
+            if let daily = indicatorDaily[symbol], Date().timeIntervalSince(daily.fetchedAt) < 120 { continue }
+            do {
+                let page = try await client.indicatorCandles(symbol: symbol, interval: .day, count: 2)
+                indicatorDaily[symbol] = (Date(), page.candles)
+            } catch {
+                indicatorErrors[symbol] = indicatorErrors[symbol] ?? error.localizedDescription
+            }
+        }
+        return errors
+    }
+
+    /// What an indicator item shows, or nil until its value loads.
+    func indicatorReading(_ indicator: MarketIndicator) -> IndicatorReading? {
+        if indicator.category == .exchangeRate {
+            return usdKrw.map(IndicatorReading.init(exchangeRate:))
+        }
+        guard let quote = indicatorQuotes[indicator.symbol] else { return nil }
+        return IndicatorReading(indicator: indicator, quote: quote, dailyCandles: indicatorDaily[indicator.symbol]?.candles ?? [])
     }
 
     /// For the account picker in the asset item editor.
