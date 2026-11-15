@@ -35,11 +35,11 @@ jobs:
         run: scripts/build-app.sh release
 
       - name: Archive app bundle
-        run: ditto -c -k --keepParent build/TossBar.app build/TossBar.zip
+        run: ditto -c -k --keepParent "build/Invest Stats.app" build/InvestStats.zip
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: TossBar
-          path: build/TossBar.zip
+          name: InvestStats
+          path: build/InvestStats.zip
           if-no-files-found: error

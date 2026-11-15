@@ -43,27 +43,27 @@ struct UpdateOfferTests {
       {
         "tag_name": "v1.2.0-dev.1", "body": "## dev notes", "draft": false, "prerelease": true,
         "html_url": "https://example.com/v1.2.0-dev.1", "published_at": "2026-11-20T00:00:00Z",
-        "assets": [{"name": "TossBar-1.2.0-dev.1.zip", "browser_download_url": "https://example.com/dev1.zip", "size": 10}]
+        "assets": [{"name": "InvestStats-1.2.0-dev.1.zip", "browser_download_url": "https://example.com/dev1.zip", "size": 10}]
       },
       {
         "tag_name": "v1.1.0", "body": "## 1.1.0 notes", "draft": false, "prerelease": false,
         "html_url": "https://example.com/v1.1.0", "published_at": "2026-11-18T00:00:00Z",
-        "assets": [{"name": "TossBar-1.1.0.zip", "browser_download_url": "https://example.com/110.zip", "size": 20}]
+        "assets": [{"name": "InvestStats-1.1.0.zip", "browser_download_url": "https://example.com/110.zip", "size": 20}]
       },
       {
         "tag_name": "v1.1.0-dev.2", "body": null, "draft": false, "prerelease": true,
         "html_url": "https://example.com/v1.1.0-dev.2", "published_at": null,
-        "assets": [{"name": "TossBar-1.1.0-dev.2.zip", "browser_download_url": "https://example.com/dev2.zip", "size": 30}]
+        "assets": [{"name": "InvestStats-1.1.0-dev.2.zip", "browser_download_url": "https://example.com/dev2.zip", "size": 30}]
       },
       {
         "tag_name": "v1.0.1", "body": "## 1.0.1 notes", "draft": false, "prerelease": false,
         "html_url": "https://example.com/v1.0.1", "published_at": "2026-11-16T00:00:00Z",
-        "assets": [{"name": "TossBar-1.0.1.zip", "browser_download_url": "https://example.com/101.zip", "size": 40}]
+        "assets": [{"name": "InvestStats-1.0.1.zip", "browser_download_url": "https://example.com/101.zip", "size": 40}]
       },
       {
         "tag_name": "v9.0.0", "body": "draft", "draft": true, "prerelease": false,
         "html_url": "https://example.com/v9.0.0", "published_at": null,
-        "assets": [{"name": "TossBar-9.0.0.zip", "browser_download_url": "https://example.com/900.zip", "size": 50}]
+        "assets": [{"name": "InvestStats-9.0.0.zip", "browser_download_url": "https://example.com/900.zip", "size": 50}]
       },
       {
         "tag_name": "not-a-version", "body": "", "draft": false, "prerelease": false,
@@ -91,7 +91,7 @@ struct UpdateOfferTests {
     @Test func stableChannelSkipsPrereleases() throws {
         let offer = try #require(try select("1.0.0", prereleases: false))
         #expect(offer.version.description == "1.1.0")
-        #expect(offer.archive.name == "TossBar-1.1.0.zip")
+        #expect(offer.archive.name == "InvestStats-1.1.0.zip")
         #expect(offer.notes.map(\.version.description) == ["1.1.0", "1.0.1"])
     }
 

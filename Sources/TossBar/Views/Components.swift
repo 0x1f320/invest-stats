@@ -92,7 +92,7 @@ struct PopoverFooter: View {
                 Divider()
                 Button("이 항목 삭제", role: .destructive) { env.store.remove(itemID) }
                 Divider()
-                Button("TossBar 종료") { env.quit() }
+                Button("Invest Stats 종료") { env.quit() }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }

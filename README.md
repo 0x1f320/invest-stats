@@ -1,6 +1,6 @@
-# tossinvest-stats
+# Invest Stats
 
-**TossBar** is a macOS menu bar app that shows live stock prices and your portfolio profit from the [Toss Securities OpenAPI](https://developers.tossinvest.com/docs), in the style of iStat Menus.
+**Invest Stats** is a macOS menu bar app that shows live stock prices and your portfolio profit from the [Toss Securities OpenAPI](https://developers.tossinvest.com/docs), in the style of iStat Menus.
 
 The app's UI is in Korean, since it is built for Toss Securities users.
 
@@ -30,7 +30,7 @@ Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager
 
 ### Updates
 
-TossBar checks [GitHub Releases](https://github.com/0x1f320/tossinvest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
+Invest Stats checks [GitHub Releases](https://github.com/0x1f320/invest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
 
 - **Settings:** the **업데이트** (Updates) tab checks on demand and turns automatic checks off.
 - **Pre-releases:** turn on **프리릴리스 받기** to also get builds from `dev`. Pre-release builds start with it on.
@@ -45,19 +45,26 @@ TossBar checks [GitHub Releases](https://github.com/0x1f320/tossinvest-stats/rel
 
 ## Install
 
-Download `TossBar-<version>.zip` from [Releases](https://github.com/0x1f320/tossinvest-stats/releases), unzip it, and move `TossBar.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. After that, TossBar updates itself; keep it in a folder you can write to, such as `/Applications`.
+Download `InvestStats-<version>.zip` from [Releases](https://github.com/0x1f320/invest-stats/releases), unzip it, and move `Invest Stats.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. After that, Invest Stats updates itself; keep it in a folder you can write to, such as `/Applications`.
 
 - **Releases** such as `v1.2.0` are built from `main`.
 - **Pre-releases** such as `v1.2.0-dev.1` are built from `dev` and carry changes that haven't reached a release yet.
+
+### Coming from TossBar
+
+The app used to be called TossBar, with the bundle id `dev.tossbar.TossBar`. TossBar builds can't update themselves to Invest Stats, so install it by hand and delete `TossBar.app`.
+
+- **Kept:** on its first launch, Invest Stats copies TossBar's settings, items and menu bar positions. Keys in `~/Library/Application Support/TossBar/` and in the iCloud Keychain keep working.
+- **Turn on again:** **Allow in Menu Bar** on macOS 26 and **로그인 시 실행** (launch at login), since macOS tracks both per app.
 
 Every release, pre-releases included, is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Build and run
 
 ```bash
-scripts/build-app.sh            # builds and ad-hoc signs build/TossBar.app
-open build/TossBar.app
-cp -R build/TossBar.app /Applications/   # optional
+scripts/build-app.sh            # builds and ad-hoc signs "build/Invest Stats.app"
+open "build/Invest Stats.app"
+cp -R "build/Invest Stats.app" /Applications/   # optional
 ```
 
 Run the tests with:
@@ -71,7 +78,7 @@ scripts/test.sh
 1. **Register a client:** in Toss Securities WTS (the PC web app), open 설정 > Open API and register a client. Add this Mac's public IP to the allowed IPs; requests from other IPs fail with 403.
 2. **Enter the keys:** enter the Client ID and Secret in the window that opens on first launch, then click **저장 및 연결 테스트** (save and test).
 3. **Storage:** by default the keys are stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). They are not stored in the login Keychain, so rebuilding the app never asks for your password.
-   - **Share with your other Macs:** in release builds, turn on **iCloud 키체인에 저장해 같은 Apple 계정의 다른 Mac 과 공유** before saving. The keys and the cached token move to the iCloud Keychain. On another Mac signed in to the same Apple Account, TossBar offers the shared keys on first launch.
+   - **Share with your other Macs:** in release builds, turn on **iCloud 키체인에 저장해 같은 Apple 계정의 다른 Mac 과 공유** before saving. The keys and the cached token move to the iCloud Keychain. On another Mac signed in to the same Apple Account, Invest Stats offers the shared keys on first launch.
    - Each Mac still needs its public IP in the client's allowed IPs.
 4. **Use a dedicated client:** Toss Securities keeps only one valid token per client. If another tool uses the same keys, each will keep invalidating the other's token.
 
@@ -79,12 +86,12 @@ scripts/test.sh
 
 ### The app is running but no items appear
 
-On macOS 26, check **System Settings > Menu Bar > Allow in Menu Bar** and make sure TossBar is on. TossBar detects this state and offers to open the setting.
+On macOS 26, check **System Settings > Menu Bar > Allow in Menu Bar** and make sure Invest Stats is on. Invest Stats detects this state and offers to open the setting.
 
 To see what the menu bar is doing with each item, run:
 
 ```bash
-TOSSBAR_DIAG=1 build/TossBar.app/Contents/MacOS/TossBar
+TOSSBAR_DIAG=1 "build/Invest Stats.app/Contents/MacOS/TossBar"
 ```
 
 ### "허용되지 않은 IP 입니다"

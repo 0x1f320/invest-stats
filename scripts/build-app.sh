@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wraps the SwiftPM executable into TossBar.app. Xcode is not required.
+# Wraps the SwiftPM executable into "Invest Stats.app". Xcode is not required.
 #
 # Usage: scripts/build-app.sh [release|debug]
 #
@@ -15,7 +15,7 @@
 #                          timestamp, which notarization requires.
 #   TOSSBAR_KEYCHAIN       Keychain that holds the signing identity.
 #   TOSSBAR_PROVISION_PROFILE
-#                          Developer ID provisioning profile for dev.tossbar.TossBar. With a
+#                          Developer ID provisioning profile for me.0x1f320.invest-stats. With a
 #                          real identity, it is embedded and the app is signed with
 #                          Resources/TossBar.entitlements, which grants the keychain access
 #                          group for the iCloud Keychain. Ignored for ad-hoc builds, which
@@ -24,7 +24,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="${1:-release}"
-APP="$ROOT/build/TossBar.app"
+APP="$ROOT/build/Invest Stats.app"
 IDENTITY="${TOSSBAR_SIGN_IDENTITY:--}"
 PROFILE="${TOSSBAR_PROVISION_PROFILE:-}"
 

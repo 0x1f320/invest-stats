@@ -528,7 +528,7 @@ struct GeneralSettingsView: View {
             Section {
                 Text("데이터 출처: 토스증권 Open API (REST). 시세는 갱신 주기마다 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다.")
                     .font(.caption).foregroundStyle(.secondary)
-                Button("TossBar 종료") { env.quit() }
+                Button("Invest Stats 종료") { env.quit() }
             }
         }
         .formStyle(.grouped)

@@ -33,7 +33,7 @@ final class Updater: ObservableObject {
         }
     }
 
-    static let repository = "0x1f320/tossinvest-stats"
+    static let repository = "0x1f320/invest-stats"
     static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
     private static let checkInterval: Duration = .seconds(24 * 60 * 60)
     private static let launchDelay: Duration = .seconds(5)
@@ -166,7 +166,7 @@ final class Updater: ObservableObject {
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=30")!)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-        request.setValue("TossBar/\(AppVersion.release?.description ?? AppVersion.shortVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("InvestStats/\(AppVersion.release?.description ?? AppVersion.shortVersion)", forHTTPHeaderField: "User-Agent")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let data: Data
         let response: URLResponse

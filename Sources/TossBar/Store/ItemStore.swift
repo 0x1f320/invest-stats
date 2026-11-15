@@ -112,7 +112,7 @@ struct MenuItemConfig: Codable, Hashable, Identifiable {
 /// Their order in the menu bar is managed by macOS (⌘-drag) or a menu bar manager, not here.
 @MainActor
 final class ItemStore: ObservableObject {
-    private static let defaultsKey = "menuItems.v1"
+    nonisolated static let defaultsKey = "menuItems.v1"
 
     @Published var items: [MenuItemConfig] {
         didSet { persist() }

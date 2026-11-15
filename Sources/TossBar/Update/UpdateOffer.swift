@@ -32,11 +32,11 @@ struct GitHubRelease: Decodable, Equatable {
 
     var version: SemanticVersion? { SemanticVersion(tagName) }
 
-    /// The zipped app: `TossBar-<version>.zip`, as `scripts/release.sh` names it.
+    /// The zipped app: `InvestStats-<version>.zip`, as `scripts/release.sh` names it.
     var appArchive: Asset? {
-        let expected = version.map { "TossBar-\($0).zip" }
+        let expected = version.map { "InvestStats-\($0).zip" }
         return assets.first { $0.name == expected }
-            ?? assets.first { $0.name.hasPrefix("TossBar-") && $0.name.hasSuffix(".zip") }
+            ?? assets.first { $0.name.hasPrefix("InvestStats-") && $0.name.hasSuffix(".zip") }
     }
 
     static func makeDecoder() -> JSONDecoder {

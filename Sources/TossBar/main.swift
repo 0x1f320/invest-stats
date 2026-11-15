@@ -1,5 +1,8 @@
 import AppKit
 
+// Before anything reads the settings: bring them over from the app's previous bundle id.
+LegacyDefaults.migrateIfNeeded()
+
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     let delegate = AppDelegate()
