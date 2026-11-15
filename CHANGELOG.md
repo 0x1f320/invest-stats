@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.0-dev.6](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.5...v1.0.0-dev.6) (2026-11-15)
+
+### ⚠ BREAKING CHANGES
+
+* rename the app to invest stats (#20)
+
+### Features
+
+* rename the app to invest stats ([#20](https://github.com/0x1f320/invest-stats/issues/20)) ([c1c84e2](https://github.com/0x1f320/invest-stats/commit/c1c84e29ed07d9aad8219df49e1ece6dc0944f9e))
+
 ## [1.0.0-dev.3](https://github.com/0x1f320/tossinvest-stats/compare/v1.0.0-dev.2...v1.0.0-dev.3) (2026-11-15)
 
 ### Features
