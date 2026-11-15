@@ -33,7 +33,7 @@ final class Updater: ObservableObject {
         }
     }
 
-    static let repository = "0x1f320/tossinvest-stats"
+    static let repository = "0x1f320/invest-stats"
     static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
     private static let checkInterval: Duration = .seconds(24 * 60 * 60)
     private static let launchDelay: Duration = .seconds(5)

@@ -1,5 +1,5 @@
 {
-  "name": "tossbar-release",
+  "name": "invest-stats-release",
   "private": true,
   "description": "Release tooling for TossBar. The app itself is built with SwiftPM.",
   "engines": {

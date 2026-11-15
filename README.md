@@ -1,4 +1,4 @@
-# tossinvest-stats
+# Invest Stats
 
 **Invest Stats** is a macOS menu bar app that shows live stock prices and your portfolio profit from the [Toss Securities OpenAPI](https://developers.tossinvest.com/docs), in the style of iStat Menus.
 
@@ -30,7 +30,7 @@ Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager
 
 ### Updates
 
-Invest Stats checks [GitHub Releases](https://github.com/0x1f320/tossinvest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
+Invest Stats checks [GitHub Releases](https://github.com/0x1f320/invest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
 
 - **Settings:** the **업데이트** (Updates) tab checks on demand and turns automatic checks off.
 - **Pre-releases:** turn on **프리릴리스 받기** to also get builds from `dev`. Pre-release builds start with it on.
@@ -45,7 +45,7 @@ Invest Stats checks [GitHub Releases](https://github.com/0x1f320/tossinvest-stat
 
 ## Install
 
-Download `InvestStats-<version>.zip` from [Releases](https://github.com/0x1f320/tossinvest-stats/releases), unzip it, and move `Invest Stats.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. After that, Invest Stats updates itself; keep it in a folder you can write to, such as `/Applications`.
+Download `InvestStats-<version>.zip` from [Releases](https://github.com/0x1f320/invest-stats/releases), unzip it, and move `Invest Stats.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. After that, Invest Stats updates itself; keep it in a folder you can write to, such as `/Applications`.
 
 - **Releases** such as `v1.2.0` are built from `main`.
 - **Pre-releases** such as `v1.2.0-dev.1` are built from `dev` and carry changes that haven't reached a release yet.
