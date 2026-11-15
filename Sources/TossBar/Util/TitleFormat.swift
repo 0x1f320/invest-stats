@@ -96,6 +96,42 @@ enum AssetTitleToken: TitleToken {
     var isAmount: Bool { self == .profit || self == .marketValue || self == .purchase }
 }
 
+/// Tokens of an indicator item's menu bar format. The letters mean what they mean for a
+/// stock item.
+enum IndicatorTitleToken: TitleToken {
+    case name, symbol, value, changeRate, changeAmount
+
+    var letter: Character {
+        switch self {
+        case .name: return "n"
+        case .symbol: return "c"
+        case .value: return "p"
+        case .changeRate: return "r"
+        case .changeAmount: return "a"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .name: return "이름 (표시 이름 또는 지표명)"
+        case .symbol: return "지표 코드"
+        case .value: return "현재 값 (지수, 금리 또는 환율)"
+        case .changeRate: return "전일 대비 등락률 (환율 제외)"
+        case .changeAmount: return "전일 대비 등락폭 (금리는 %p, 환율 제외)"
+        }
+    }
+
+    var example: String {
+        switch self {
+        case .name: return "코스피"
+        case .symbol: return "KOSPI"
+        case .value: return "2,812.45"
+        case .changeRate: return "+0.51%"
+        case .changeAmount: return "+14.35"
+        }
+    }
+}
+
 /// A menu bar format written printf style: `%` and a letter stand for one of the item's
 /// values, `%%` is a literal `%`, and everything else is shown as written. A `%` that isn't
 /// followed by a known letter is also shown as written, so `%r%)` reads as the rate followed
@@ -232,6 +268,25 @@ extension AssetItemConfig {
     }
 
     var titleFormat: TitleFormat<AssetTitleToken> {
+        TitleFormat(format?.nilIfBlank ?? defaultFormat)
+    }
+}
+
+extension IndicatorItemConfig {
+    /// The format the toggles describe, used when no custom format is set. An index shows its
+    /// change rate, a bond yield its change in percentage points, and the exchange rate no
+    /// change, since the API reports none.
+    var defaultFormat: String {
+        let change: String?
+        switch indicator?.category {
+        case .bond: change = "%a"
+        case .exchangeRate: change = nil
+        case .index, nil: change = "%r"
+        }
+        return [showName ? "%n" : nil, "%p", showChange ? change : nil].compactMap { $0 }.joined(separator: " ")
+    }
+
+    var titleFormat: TitleFormat<IndicatorTitleToken> {
         TitleFormat(format?.nilIfBlank ?? defaultFormat)
     }
 }

@@ -76,7 +76,7 @@ struct ItemsSettingsView: View {
                 if store.items.isEmpty {
                     Text(connections.isEmpty
                          ? "아직 연결이 없습니다.\n먼저 '연결' 탭에서 증권사를 연결하세요."
-                         : "아직 항목이 없습니다.\n아래 + 버튼으로 '주가' 또는 '자산' 항목을 추가하세요.")
+                         : "아직 항목이 없습니다.\n아래 + 버튼으로 '주가', '자산' 또는 '지표' 항목을 추가하세요.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                 }
@@ -86,6 +86,7 @@ struct ItemsSettingsView: View {
                 Menu {
                     Button("주가 항목 추가…") { env.openEditor(.newStock) }
                     Button("자산 항목 추가…") { env.openEditor(.newAsset) }
+                    Button("지표 항목 추가…") { env.openEditor(.newIndicator) }
                 } label: {
                     Label("추가", systemImage: "plus")
                 }
@@ -129,6 +130,12 @@ struct ItemsSettingsView: View {
                     Text("자산" + (config.label.nilIfBlank.map { " · \($0)" } ?? ""))
                     detail(item, assetDetail(config, service: service))
                 }
+            case .indicator(let config):
+                Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.purple).frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("지표 · \(config.displayName?.nilIfBlank ?? config.indicator?.name ?? config.symbol)")
+                    detail(item, indicatorDetail(config))
+                }
             }
             Spacer()
             Button {
@@ -162,6 +169,16 @@ struct ItemsSettingsView: View {
             Text("⚠︎ 연결 없음 · 편집해서 연결을 지정하세요")
                 .font(.caption).foregroundStyle(.orange)
         }
+    }
+
+    private func indicatorDetail(_ config: IndicatorItemConfig) -> String {
+        guard let indicator = config.indicator else { return "\(config.symbol) · 지원하지 않는 지표" }
+        return [
+            indicator.displaySymbol,
+            indicator.category.title,
+            config.showName ? "이름 표시" : "이름 숨김",
+            indicator.category == .exchangeRate ? nil : (config.showChange ? "등락 표시" : "등락 숨김"),
+        ].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func assetDetail(_ config: AssetItemConfig, service: MarketDataService?) -> String {

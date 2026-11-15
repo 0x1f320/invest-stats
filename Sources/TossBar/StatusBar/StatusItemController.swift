@@ -135,6 +135,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             root = AnyView(StockPopoverView(itemID: id, env: env, data: data))
         case (.asset, let data?):
             root = AnyView(AssetPopoverView(itemID: id, env: env, data: data))
+        case (.indicator, let data?):
+            root = AnyView(IndicatorPopoverView(itemID: id, env: env, data: data))
         }
         let host = NSHostingController(rootView: root)
         host.sizingOptions = .preferredContentSize
@@ -192,6 +194,7 @@ enum TitleRenderer {
         switch config.kind {
         case .stock(let stock): title = stockTitle(stock, data: data)
         case .asset(let asset): title = assetTitle(asset, data: data)
+        case .indicator(let indicator): title = indicatorTitle(indicator, data: data)
         }
         return dimmedIfClosed(title, config: config, data: data, env: env)
     }
@@ -222,6 +225,10 @@ enum TitleRenderer {
             let seq = data.accountSeq(for: asset)
             let account = data.accounts.first { $0.accountSeq == seq }?.maskedNumber ?? "기본 계좌"
             return "자산 · \(connection.connection.displayName) · \(account) · \(asset.mode.title) · \(asset.usesAfterCost ? "수수료·세금 제외" : "원본 수익")"
+        case .indicator(let config):
+            guard let indicator = config.indicator else { return "지표 · \(config.symbol) · 지원하지 않는 지표" }
+            let name = indicator.category == .exchangeRate ? "\(indicator.name) 매매기준율" : indicator.name
+            return "지표 · \(name) (\(indicator.displaySymbol)) · \(connection.connection.displayName)"
         }
     }
 
@@ -231,6 +238,7 @@ enum TitleRenderer {
         switch config.kind {
         case .stock(let stock): prefix = stock.showName ? (stock.displayName?.nilIfBlank ?? stock.symbol) : stock.symbol
         case .asset(let asset): prefix = asset.label.nilIfBlank ?? "자산"
+        case .indicator(let indicator): prefix = indicatorName(indicator)
         }
         return attributed([prefix, "⚠︎"].compactMap { $0 }.joined(separator: " "))
     }
@@ -267,6 +275,12 @@ enum TitleRenderer {
             let trend = summary.map { headlineTrend(asset, summary: $0) } ?? .up
             let title = attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .white)
             return dimmedIfClosed(title, config: config, data: data, env: env)
+        case .indicator(let indicator):
+            let reading = indicator.indicator.flatMap { data?.indicatorReading($0) }
+            let pieces = indicator.titleFormat.render { token in
+                TitlePiece(reading.flatMap { indicatorValue(token, config: indicator, reading: $0) } ?? token.example)
+            }
+            return dimmedIfClosed(attributed(pieces, signedColor: .white), config: config, data: data, env: env)
         }
     }
 
@@ -315,6 +329,39 @@ enum TitleRenderer {
             return attributed("\(prefix) \(failed ? "⚠︎" : "…")")
         }
         let pieces = format.render { TitlePiece(stockValue($0, config: config, data: data) ?? "…") }
+        return attributed(pieces, signedColor: .white)
+    }
+
+    // MARK: Indicator items
+
+    /// The item's display name, else the indicator's name, else its saved symbol.
+    private static func indicatorName(_ config: IndicatorItemConfig) -> String {
+        var name = config.displayName?.nilIfBlank ?? config.indicator?.name ?? config.symbol
+        if name.count > 12 { name = String(name.prefix(11)) + "…" }
+        return name
+    }
+
+    /// An indicator item's value for a format token, or nil while it isn't known. The
+    /// exchange rate has no change, so its change tokens are empty rather than pending.
+    private static func indicatorValue(_ token: IndicatorTitleToken, config: IndicatorItemConfig, reading: IndicatorReading) -> String? {
+        switch token {
+        case .name: return indicatorName(config)
+        case .symbol: return reading.indicator.displaySymbol
+        case .value: return reading.formattedValue
+        case .changeRate: return reading.hasChange ? reading.formattedChangeRate : ""
+        case .changeAmount: return reading.hasChange ? reading.formattedChange : ""
+        }
+    }
+
+    private static func indicatorTitle(_ config: IndicatorItemConfig, data: MarketDataService) -> NSAttributedString {
+        let format = config.titleFormat
+        let prefix = format.uses(.name) ? indicatorName(config) : (config.indicator?.displaySymbol ?? config.symbol)
+        guard let indicator = config.indicator else { return attributed("\(prefix) ⚠︎") }
+        guard let reading = data.indicatorReading(indicator) else {
+            let failed = data.indicatorErrors[indicator.symbol] != nil || (data.errorMessage != nil && !data.isRefreshing)
+            return attributed("\(prefix) \(failed ? "⚠︎" : "…")")
+        }
+        let pieces = format.render { TitlePiece(indicatorValue($0, config: config, reading: reading) ?? "…") }
         return attributed(pieces, signedColor: .white)
     }
 
