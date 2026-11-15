@@ -28,6 +28,15 @@ Add as many stock and asset items as you like, and remove them from the settings
 
 Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager such as [Thaw](https://github.com/stonerl/Thaw) or [Ice](https://github.com/jordanbaird/Ice).
 
+### Updates
+
+TossBar checks [GitHub Releases](https://github.com/0x1f320/tossinvest-stats/releases) at launch and once a day. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.
+
+- **Settings:** the **업데이트** (Updates) tab checks on demand and turns automatic checks off.
+- **Pre-releases:** turn on **프리릴리스 받기** to also get builds from `dev`. Pre-release builds start with it on.
+- **Safety:** an update is installed only if it is signed by the same developer as the running app.
+- **Local builds** don't update themselves.
+
 ## Requirements
 
 - macOS 14 or later
@@ -36,7 +45,7 @@ Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager
 
 ## Install
 
-Download `TossBar-<version>.zip` from [Releases](https://github.com/0x1f320/tossinvest-stats/releases), unzip it, and move `TossBar.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning.
+Download `TossBar-<version>.zip` from [Releases](https://github.com/0x1f320/tossinvest-stats/releases), unzip it, and move `TossBar.app` to `/Applications`. Releases are signed with a Developer ID and notarized by Apple, so they open without a Gatekeeper warning. After that, TossBar updates itself; keep it in a folder you can write to, such as `/Applications`.
 
 - **Releases** such as `v1.2.0` are built from `main`.
 - **Pre-releases** such as `v1.2.0-dev.1` are built from `dev` and carry changes that haven't reached a release yet.
@@ -87,6 +96,7 @@ Your public IP changed or isn't registered. Add it in WTS > 설정 > Open API.
 | `Sources/TossBar/API` | REST client: OAuth2 token cache, per-group rate limiting, 429 and 401 retries |
 | `Sources/TossBar/Data` | Shared polling service, chart and sparkline data, KRW conversion, the searchable stock list |
 | `Sources/TossBar/StatusBar` | One `NSStatusItem` and popover per item, synced with the item list |
+| `Sources/TossBar/Update` | GitHub Releases check, version comparison, download, signature check and install |
 | `Sources/TossBar/Store` | Item configs and settings (UserDefaults), API keys and token (files) |
 | `Sources/TossBar/Views` | SwiftUI popovers, settings and onboarding |
 

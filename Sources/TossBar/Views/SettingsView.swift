@@ -23,6 +23,9 @@ struct SettingsView: View {
             GeneralSettingsView(settings: env.settings, env: env)
                 .tabItem { Label("일반", systemImage: "gearshape") }
                 .tag("general")
+            UpdateSettingsView(updater: env.updater)
+                .tabItem { Label("업데이트", systemImage: "arrow.down.circle") }
+                .tag("update")
         }
         .frame(width: 580, height: 480)
     }

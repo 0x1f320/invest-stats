@@ -7,11 +7,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusBar: StatusBarManager?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var updateWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarManager(env: env)
         env.openSettings = { [weak self] in self?.showSettings() }
+        env.updater.presentOffer = { [weak self] in self?.showUpdate() }
         env.data.start()
+        env.updater.start()
 
         // First launch (no keys yet): ask for the API keys.
         if !env.credentials.isConfigured {
@@ -59,9 +62,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
+    func showUpdate() {
+        if updateWindow == nil {
+            updateWindow = makeWindow(
+                title: "TossBar 업데이트",
+                rootView: UpdateView(updater: env.updater) { [weak self] in
+                    self?.updateWindow?.close()
+                }
+            )
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        updateWindow?.makeKeyAndOrderFront(nil)
+    }
+
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         if window === onboardingWindow { onboardingWindow = nil }
         if window === settingsWindow { settingsWindow = nil }
+        if window === updateWindow { updateWindow = nil }
     }
 }

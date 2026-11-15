@@ -91,7 +91,7 @@ git push --force-with-lease origin <branch>
 - **Versions come from commits:** `feat` bumps the minor version, `fix` and `perf` the patch, and a breaking change the major. Other types don't release. This is why PR titles must follow Conventional Commits.
 - **`dev` publishes prereleases** such as `v1.2.0-dev.1`, marked as pre-release on GitHub.
 - **`main` publishes releases** such as `v1.2.0`.
-- **Nothing is committed back:** the version lives only in the tag. `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, and `CFBundleVersion` gets the workflow run number.
+- **Nothing is committed back:** the version lives only in the tag. `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, `CFBundleVersion` gets the workflow run number, and `TossBarReleaseVersion` gets the full version (`1.2.0-dev.3`) for the in-app updater.
 - **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
 - **Provisioning profile:** release builds embed the "TossBar Developer ID" profile for App ID `dev.tossbar.TossBar` and are signed with `Resources/TossBar.entitlements`, which grants the keychain access group for the iCloud Keychain. `scripts/release.sh` fails if the signed app lacks that entitlement. The profile expires with the Developer ID certificate; regenerate it in the developer portal whenever the certificate is renewed.
 - **Back-merge:** a release tag on `main` sits on a merge commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
@@ -128,4 +128,8 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Space requests per rate limit group.
   - Batch price requests across all items.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data keeps loading.
+- **Updates come only from this repository's GitHub Releases.**
+  - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `TossBar-<version>.zip` asset, so keep that asset name.
+  - It installs a download only if its signature satisfies the running app's designated requirement (same bundle id and Developer ID team) and its `TossBarReleaseVersion` matches the tag.
+  - Local builds have no `TossBarReleaseVersion`, so they never update themselves.
 - **Bundle id `dev.tossbar.TossBar` stays fixed.** Changing it resets user settings and the macOS "Allow in Menu Bar" entry.
