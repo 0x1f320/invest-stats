@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.1...v1.1.0-dev.2) (2026-11-15)
+
+### Features
+
+* **menubar:** optionally dim items while their markets are closed ([#31](https://github.com/0x1f320/invest-stats/issues/31)) ([aa65080](https://github.com/0x1f320/invest-stats/commit/aa6508089cd75682e65e39380ef4f9a471a7b719))
+
 ## [1.1.0-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.0.0...v1.1.0-dev.1) (2026-11-15)
 
 ### Features
