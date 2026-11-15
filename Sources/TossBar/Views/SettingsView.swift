@@ -1,49 +1,43 @@
 import SwiftUI
 
-struct SettingsView: View {
-    let env: AppEnvironment
-    @AppStorage("settingsTab") private var tab = "items"
+// MARK: - Settings window
 
-    var body: some View {
-        TabView(selection: $tab) {
-            ItemsSettingsView(env: env)
-                .tabItem { Label("항목", systemImage: "menubar.rectangle") }
-                .tag("items")
-            ConnectionsSettingsView(env: env)
-                .tabItem { Label("연결", systemImage: "link") }
-                .tag("connections")
-            GeneralSettingsView(settings: env.settings, env: env)
-                .tabItem { Label("일반", systemImage: "gearshape") }
-                .tag("general")
-            UpdateSettingsView(updater: env.updater)
-                .tabItem { Label("업데이트", systemImage: "arrow.down.circle") }
-                .tag("update")
-        }
-        .frame(width: 580, height: 480)
-        .padding([.horizontal, .bottom], 20)
-        .padding(.top, 8)
-        .onAppear {
-            // The tab was called "api" before connections.
-            if tab == "api" { tab = "connections" }
-        }
+/// The settings window's tabs, shown as toolbar tabs like other macOS settings windows.
+@MainActor
+enum SettingsTabs {
+    /// UserDefaults key for the last selected tab.
+    static let selectionKey = "settingsTab"
+
+    /// The tab to open with, from the last one selected.
+    static var savedSelection: String? {
+        let saved = UserDefaults.standard.string(forKey: selectionKey)
+        // The tab was called "api" before connections.
+        return saved == "api" ? "connections" : saved
+    }
+
+    static func make(env: AppEnvironment) -> [ToolbarTab] {
+        [
+            ToolbarTab("items", "항목", symbol: "menubar.rectangle") {
+                ItemsSettingsView(env: env)
+                    .frame(width: 560, height: 400)
+            },
+            ToolbarTab("connections", "연결", symbol: "link") {
+                ConnectionsSettingsView(env: env)
+                    .frame(width: 560, height: 400)
+            },
+            ToolbarTab("general", "일반", symbol: "gearshape") {
+                GeneralSettingsView(settings: env.settings, env: env)
+                    .frame(width: 560, height: 300)
+            },
+            ToolbarTab("update", "업데이트", symbol: "arrow.down.circle") {
+                UpdateSettingsView(updater: env.updater)
+                    .frame(width: 560, height: 340)
+            },
+        ]
     }
 }
 
 // MARK: - Items
-
-enum EditorTarget: Identifiable {
-    case newStock
-    case newAsset
-    case edit(MenuItemConfig)
-
-    var id: String {
-        switch self {
-        case .newStock: return "newStock"
-        case .newAsset: return "newAsset"
-        case .edit(let item): return item.id.uuidString
-        }
-    }
-}
 
 struct ItemsSettingsView: View {
     let env: AppEnvironment
@@ -51,7 +45,6 @@ struct ItemsSettingsView: View {
     @ObservedObject private var data: MarketDataHub
     @ObservedObject private var connections: ConnectionStore
     @State private var selection: UUID?
-    @State private var editor: EditorTarget?
 
     init(env: AppEnvironment) {
         self.env = env
@@ -70,7 +63,7 @@ struct ItemsSettingsView: View {
                     row(item)
                         .tag(item.id)
                         .contextMenu {
-                            Button("편집…") { editor = .edit(item) }
+                            Button("편집…") { env.editItem(item.id) }
                             Button("삭제", role: .destructive) { store.remove(item.id) }
                         }
                 }
@@ -91,8 +84,8 @@ struct ItemsSettingsView: View {
 
             HStack(spacing: 8) {
                 Menu {
-                    Button("주가 항목 추가…") { editor = .newStock }
-                    Button("자산 항목 추가…") { editor = .newAsset }
+                    Button("주가 항목 추가…") { env.openEditor(.newStock) }
+                    Button("자산 항목 추가…") { env.openEditor(.newAsset) }
                 } label: {
                     Label("추가", systemImage: "plus")
                 }
@@ -100,7 +93,7 @@ struct ItemsSettingsView: View {
                 .disabled(connections.isEmpty)
 
                 Button {
-                    if let selection, let item = store.item(selection) { editor = .edit(item) }
+                    if let selection { env.editItem(selection) }
                 } label: {
                     Label("편집", systemImage: "pencil")
                 }
@@ -117,25 +110,6 @@ struct ItemsSettingsView: View {
             }
         }
         .padding(20)
-        .onReceive(env.$pendingEdit) { id in
-            guard let id, let item = store.item(id) else { return }
-            selection = id
-            editor = .edit(item)
-            env.pendingEdit = nil
-        }
-        .sheet(item: $editor) { target in
-            switch target {
-            case .newStock:
-                StockItemEditor(env: env, existing: nil) { editor = nil }
-            case .newAsset:
-                AssetItemEditor(env: env, existing: nil) { editor = nil }
-            case .edit(let item):
-                switch item.kind {
-                case .stock: StockItemEditor(env: env, existing: item) { editor = nil }
-                case .asset: AssetItemEditor(env: env, existing: item) { editor = nil }
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -199,341 +173,6 @@ struct ItemsSettingsView: View {
             config.colorByTrend ? "손익 색상" : nil,
         ].compactMap { $0 }.joined(separator: " · ")
     }
-}
-
-// MARK: - Stock editor
-
-struct StockItemEditor: View {
-    let env: AppEnvironment
-    let existing: MenuItemConfig?
-    var dismiss: () -> Void
-
-    @ObservedObject private var universe: StockUniverse
-    @ObservedObject private var connections: ConnectionStore
-    @State private var connectionID: UUID?
-    @State private var query = ""
-    @State private var selectedSymbol: String?
-    @State private var selectedName: String?
-    @State private var listSelection: String?
-    @State private var displayName = ""
-    @State private var showName = true
-    @State private var showChange = true
-    @State private var displayCurrency: PriceDisplayCurrency = .native
-    @State private var isValidating = false
-    @State private var error: String?
-
-    init(env: AppEnvironment, existing: MenuItemConfig?, dismiss: @escaping () -> Void) {
-        self.env = env
-        self.existing = existing
-        self.dismiss = dismiss
-        self.universe = env.universe
-        self.connections = env.connections
-        _connectionID = State(initialValue: Self.initialConnection(existing, env: env))
-        if case .stock(let config)? = existing?.kind {
-            _selectedSymbol = State(initialValue: config.symbol)
-            _selectedName = State(initialValue: existing.flatMap(env.data.service(for:))?.stockInfo[config.symbol]?.name)
-            _displayName = State(initialValue: config.displayName ?? "")
-            _showName = State(initialValue: config.showName)
-            _showChange = State(initialValue: config.showChange)
-            _displayCurrency = State(initialValue: config.displayCurrency)
-        }
-    }
-
-    /// The item's connection, or the first one for a new item.
-    static func initialConnection(_ existing: MenuItemConfig?, env: AppEnvironment) -> UUID? {
-        guard let existing else { return env.connections.connections.first?.id }
-        return env.connections.resolve(existing.connectionID)?.id
-    }
-
-    private var service: MarketDataService? { env.data.service(forConnection: connectionID) }
-
-    private func loadUniverse() {
-        if let client = service?.client { universe.ensureLoaded(using: client) }
-    }
-
-    private var results: [StockUniverse.Entry] { universe.search(query) }
-
-    /// Whether the chosen stock is a US stock, from the search list or the stock info
-    /// already loaded. Otherwise a non-numeric code is taken as a US ticker (Korean codes
-    /// are six characters starting with a digit).
-    private var selectedIsUS: Bool {
-        guard let symbol = selectedSymbol else { return false }
-        if let entry = universe.entries.first(where: { $0.symbol == symbol }) { return entry.isUS }
-        if let info = service?.stockInfo[symbol] { return info.currency == .usd }
-        return symbol.range(of: "^[0-9][0-9A-Z]{5}$", options: .regularExpression) == nil
-    }
-
-    private var originalSymbol: String? {
-        if case .stock(let config)? = existing?.kind { return config.symbol }
-        return nil
-    }
-
-    private var originalName: String? {
-        originalSymbol.flatMap { service?.stockInfo[$0]?.name }
-    }
-
-    /// The query itself as a symbol, for stocks missing from the search list.
-    private var manualSymbol: String? {
-        let q = query.trimmingCharacters(in: .whitespaces).uppercased()
-        guard !q.isEmpty, q.range(of: "^[A-Z0-9.\\-]+$", options: .regularExpression) != nil else { return nil }
-        return q
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(existing == nil ? "주가 항목 추가" : "주가 항목 편집").font(.title3.weight(.semibold))
-
-            Form {
-                ConnectionPicker(connections: connections, selection: $connectionID)
-            }
-            .formStyle(.columns)
-
-            HStack(spacing: 6) {
-                Text(existing == nil ? "선택한 종목" : "종목").foregroundStyle(.secondary)
-                if let selectedSymbol {
-                    Text("\(selectedName ?? selectedSymbol) (\(selectedSymbol))").fontWeight(.medium)
-                    if let originalSymbol, originalSymbol != selectedSymbol {
-                        Text("← \(originalName ?? originalSymbol)에서 변경").font(.caption).foregroundStyle(.orange)
-                    }
-                } else {
-                    Text("아래에서 검색해 선택하세요").foregroundStyle(.tertiary)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField(existing == nil
-                          ? "종목명 또는 코드 검색 (예: 삼성전자, 005930, AAPL)"
-                          : "다른 종목으로 바꾸려면 검색 (예: 삼성전자, 005930, AAPL)", text: $query)
-                    .textFieldStyle(.roundedBorder)
-
-                Group {
-                    if universe.isLoading && universe.entries.isEmpty {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Text("종목 목록 불러오는 중… (\(universe.loadedMarkets)/\(StockUniverse.markets.count))")
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        List(selection: $listSelection) {
-                            if let manual = manualSymbol, !results.contains(where: { $0.symbol == manual }) {
-                                HStack {
-                                    Image(systemName: "keyboard")
-                                    Text("코드로 직접 지정: \(manual)")
-                                }
-                                .tag(manual)
-                            }
-                            ForEach(results) { entry in
-                                HStack {
-                                    Text(entry.name)
-                                    Spacer()
-                                    Text("\(entry.symbol) · \(entry.market)")
-                                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                                }
-                                .tag(entry.symbol)
-                            }
-                        }
-                        .listStyle(.bordered)
-                    }
-                }
-                .frame(height: existing == nil ? 200 : 160)
-                if let message = universe.errorMessage, universe.entries.isEmpty {
-                    Text("종목 목록을 불러오지 못했습니다: \(message)\n코드를 직접 입력해도 지정할 수 있습니다.")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-            }
-
-            Form {
-                TextField("메뉴바 표시 이름", text: $displayName, prompt: Text("비우면 종목명 사용"))
-                Toggle("메뉴바에 이름 표시", isOn: $showName)
-                Toggle("메뉴바에 전일 대비 등락률 표시", isOn: $showChange)
-                if selectedIsUS {
-                    Picker("가격 표시 통화", selection: $displayCurrency) {
-                        ForEach(PriceDisplayCurrency.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Text("원화는 USD/KRW 매매기준율로 환산합니다. 등락률은 달러 기준입니다.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.columns)
-
-            if let error {
-                Text(error).font(.callout).foregroundStyle(.red)
-            }
-
-            HStack {
-                Spacer()
-                Button("취소", action: dismiss).keyboardShortcut(.cancelAction)
-                Button(existing == nil ? "추가" : "저장", action: save)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selectedSymbol == nil || service == nil || isValidating)
-            }
-        }
-        .padding(20)
-        .frame(width: 460)
-        .onAppear(perform: loadUniverse)
-        .onChange(of: connectionID) { _, _ in loadUniverse() }
-        .onChange(of: listSelection) { _, symbol in
-            // Clicking empty space clears the list selection; keep the chosen stock.
-            guard let symbol else { return }
-            selectedSymbol = symbol
-            selectedName = results.first { $0.symbol == symbol }?.name
-                ?? service?.stockInfo[symbol]?.name
-            error = nil
-        }
-    }
-
-    private func makeConfig(symbol: String) -> StockItemConfig {
-        StockItemConfig(
-            symbol: symbol,
-            displayName: displayName.nilIfBlank,
-            showName: showName,
-            showChange: showChange,
-            displayCurrency: selectedIsUS ? displayCurrency : .native
-        )
-    }
-
-    private func save() {
-        guard let symbol = selectedSymbol, let service else { return }
-        let item = MenuItemConfig(id: existing?.id ?? UUID(), kind: .stock(makeConfig(symbol: symbol)), connectionID: connectionID)
-
-        // A newly chosen symbol that isn't in the search list is checked against the API first.
-        if symbol != originalSymbol, !universe.entries.contains(where: { $0.symbol == symbol }) {
-            isValidating = true
-            Task {
-                defer { isValidating = false }
-                do {
-                    let found = try await service.client.stocks([symbol])
-                    guard !found.isEmpty else { error = "종목을 찾을 수 없습니다: \(symbol)"; return }
-                    env.store.upsert(item)
-                    dismiss()
-                } catch {
-                    self.error = error.localizedDescription
-                }
-            }
-        } else {
-            env.store.upsert(item)
-            dismiss()
-        }
-    }
-}
-
-// MARK: - Asset editor
-
-struct AssetItemEditor: View {
-    let env: AppEnvironment
-    let existing: MenuItemConfig?
-    var dismiss: () -> Void
-
-    @ObservedObject private var data: MarketDataHub
-    @ObservedObject private var connections: ConnectionStore
-    @State private var connectionID: UUID?
-    @State private var label = ""
-    @State private var accountSeq: Int64?
-    @State private var mode: AssetMode = .total
-    @State private var afterCost = false
-    @State private var colorByTrend = false
-    @State private var loadingAccounts = false
-    @State private var error: String?
-
-    init(env: AppEnvironment, existing: MenuItemConfig?, dismiss: @escaping () -> Void) {
-        self.env = env
-        self.existing = existing
-        self.dismiss = dismiss
-        self.data = env.data
-        self.connections = env.connections
-        _connectionID = State(initialValue: StockItemEditor.initialConnection(existing, env: env))
-        if case .asset(let config)? = existing?.kind {
-            _label = State(initialValue: config.label)
-            _accountSeq = State(initialValue: config.accountSeq)
-            _mode = State(initialValue: config.mode)
-            _afterCost = State(initialValue: config.afterCost)
-            _colorByTrend = State(initialValue: config.colorByTrend)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(existing == nil ? "자산 항목 추가" : "자산 항목 편집").font(.title3.weight(.semibold))
-            Text("보유 종목 기준 손익을 메뉴바에 '{수익}₩ ({수익률}%)' 형식으로 표시합니다. 해외 주식 손익은 매매기준율로 원화 환산합니다.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Form {
-                ConnectionPicker(connections: connections, selection: $connectionID)
-                TextField("라벨", text: $label, prompt: Text("선택 (예: 💰, 주식)"))
-                HStack {
-                    Picker("계좌", selection: $accountSeq) {
-                        Text("기본 계좌 (첫 번째)").tag(Int64?.none)
-                        ForEach(service?.accounts ?? []) { account in
-                            Text("\(account.maskedNumber) · \(account.accountType == "BROKERAGE" ? "종합매매" : account.accountType)")
-                                .tag(Int64?.some(account.accountSeq))
-                        }
-                    }
-                    if loadingAccounts { ProgressView().controlSize(.small) }
-                }
-                Picker("표시 기준", selection: $mode) {
-                    ForEach(AssetMode.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.radioGroup)
-                Picker("수익 기준", selection: $afterCost) {
-                    Text("원본 수익").tag(false)
-                    Text("수수료·세금 제외").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .disabled(mode != .total)
-                Text(mode == .total
-                     ? "수수료·세금 제외는 토스증권이 계산한 세후 손익을 씁니다. 보유 종목 목록의 종목별 손익에도 같은 기준이 적용됩니다."
-                     : "일간 손익은 원본 기준만 제공됩니다.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Toggle("메뉴바에 손익 색상 표시", isOn: $colorByTrend)
-                Text("수익은 빨강, 손실은 파랑처럼 손익 부호에 따라 색을 입힙니다. 색상 규칙은 일반 설정을 따릅니다.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .formStyle(.columns)
-
-            if let error {
-                Text(error).font(.callout).foregroundStyle(.red)
-            }
-
-            HStack {
-                Spacer()
-                Button("취소", action: dismiss).keyboardShortcut(.cancelAction)
-                Button(existing == nil ? "추가" : "저장") {
-                    let config = AssetItemConfig(
-                        label: label, accountSeq: accountSeq, mode: mode,
-                        afterCost: afterCost, colorByTrend: colorByTrend
-                    )
-                    env.store.upsert(MenuItemConfig(id: existing?.id ?? UUID(), kind: .asset(config), connectionID: connectionID))
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(service == nil)
-            }
-        }
-        .padding(20)
-        .frame(width: 460)
-        .onChange(of: connectionID) { _, _ in
-            // Accounts belong to a connection, so another connection starts from its first.
-            accountSeq = nil
-        }
-        .task(id: connectionID) {
-            error = nil
-            guard let service, service.accounts.isEmpty else { return }
-            loadingAccounts = true
-            defer { loadingAccounts = false }
-            do {
-                _ = try await service.loadAccounts()
-            } catch {
-                self.error = "계좌 목록을 불러오지 못했습니다: \(error.localizedDescription)"
-            }
-        }
-    }
-
-    private var service: MarketDataService? { data.service(forConnection: connectionID) }
 }
 
 // MARK: - General

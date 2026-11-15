@@ -13,9 +13,8 @@ final class AppEnvironment: ObservableObject {
     let updater: Updater
 
     var openSettings: () -> Void = {}
-
-    /// Set by "편집…" in a menu or popover. The settings window opens the editor for it.
-    @Published var pendingEdit: UUID?
+    /// Opens an add dialog or an item's settings window.
+    var openEditor: (EditorTarget) -> Void = { _ in }
 
     init() {
         settings = AppSettings()
@@ -30,10 +29,10 @@ final class AppEnvironment: ObservableObject {
         updater = Updater()
     }
 
+    /// Opens an item's settings window, from a menu, popover or the settings list.
     func editItem(_ id: UUID) {
-        UserDefaults.standard.set("items", forKey: "settingsTab")
-        openSettings()
-        pendingEdit = id
+        guard store.item(id) != nil else { return }
+        openEditor(.item(id))
     }
 
     func quit() {

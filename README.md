@@ -27,12 +27,15 @@ An asset item shows the profit on an account's holdings as `{profit}₩ ({rate}%
 Each item reads from a connection: a provider (Toss Securities for now) and its API keys. Connections are managed in the **연결** (Connections) settings tab.
 
 - **Several connections:** add as many as you like, including more than one for the same provider, for example your own account and a family member's. Each one needs its own keys, since two connections with the same keys would keep invalidating each other's token.
-- **Per item:** the stock and asset editors ask which connection the item reads from.
+- **Per item:** adding an item asks which connection it reads from, and the item's settings window can change it later.
 - **iCloud sync:** in release builds, turn on **iCloud 키체인으로 연결 동기화** in the 연결 tab to sync all connections, with their cached tokens, through the iCloud Keychain. They then show up on your other Macs signed in to the same Apple Account that have sync on. A Mac with sync off offers connections it finds there.
 
 ### Any number of items
 
 Add as many stock and asset items as you like, and remove them from the settings window, the item's right-click menu, or the `…` menu in its popover.
+
+- **Adding:** a small dialog asks only for what the item needs, a stock or an account, and then opens the item's settings window.
+- **Settings window:** each item has its own window with toolbar tabs, like a macOS settings window: 종목 (Stock) and 표시 (Display) for a stock item, 계좌 (Account), 손익 (Profit) and 표시 (Display) for an asset item. Changes apply as you make them. Open it with 편집 (Edit) in the settings, the item's right-click menu, or the `…` menu in its popover.
 
 Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager such as [Thaw](https://github.com/stonerl/Thaw) or [Ice](https://github.com/jordanbaird/Ice).
 
