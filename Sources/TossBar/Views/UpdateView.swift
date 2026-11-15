@@ -186,6 +186,7 @@ struct UpdateSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .padding(10)
     }
 
