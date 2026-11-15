@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.0-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.0.0...v1.1.0-dev.1) (2026-11-15)
+
+### Features
+
+* **api:** add market indicator endpoints ([#34](https://github.com/0x1f320/invest-stats/issues/34)) ([0dd7e8e](https://github.com/0x1f320/invest-stats/commit/0dd7e8e3e5e58f4dcca5407063797d65227a6cd5))
+* **market:** show the market session in stock and asset popovers ([#29](https://github.com/0x1f320/invest-stats/issues/29)) ([fcc5d13](https://github.com/0x1f320/invest-stats/commit/fcc5d130aef1a61c367c2ff60baf3ae862075042))
+
+### Performance Improvements
+
+* **market:** poll less while every market is closed ([#30](https://github.com/0x1f320/invest-stats/issues/30)) ([d63b71e](https://github.com/0x1f320/invest-stats/commit/d63b71e21553b95ec0491484e37ec2ee252bef7a))
+
 ## 1.0.0 (2026-11-15)
 
 ### ⚠ BREAKING CHANGES
