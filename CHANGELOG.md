@@ -5,6 +5,13 @@
 ### Features
 
 * edit items in their own settings windows ([#23](https://github.com/0x1f320/invest-stats/issues/23)) ([d593428](https://github.com/0x1f320/invest-stats/commit/d593428d07f3415320bf68df3e6c6b0260711d57))
+* **menubar:** let each item set its own menu bar format ([#26](https://github.com/0x1f320/invest-stats/issues/26)) ([494ce06](https://github.com/0x1f320/invest-stats/commit/494ce06546bf17bdeda5716d6867ea38fdc74c74))
+
+## [1.0.0-dev.9](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.8...v1.0.0-dev.9) (2026-11-15)
+
+### Features
+
+* edit items in their own settings windows ([#23](https://github.com/0x1f320/invest-stats/issues/23)) ([d593428](https://github.com/0x1f320/invest-stats/commit/d593428d07f3415320bf68df3e6c6b0260711d57))
 
 ## [1.0.0-dev.9](https://github.com/0x1f320/invest-stats/compare/v1.0.0-dev.8...v1.0.0-dev.9) (2026-11-15)
 
