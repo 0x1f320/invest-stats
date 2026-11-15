@@ -9,17 +9,9 @@ struct SettingsView: View {
             ItemsSettingsView(env: env)
                 .tabItem { Label("항목", systemImage: "menubar.rectangle") }
                 .tag("items")
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    CredentialsHelp()
-                    GroupBox {
-                        CredentialsForm(credentials: env.credentials).padding(6)
-                    }
-                }
-                .padding(20)
-            }
-            .tabItem { Label("API 연결", systemImage: "key") }
-            .tag("api")
+            ConnectionsSettingsView(env: env)
+                .tabItem { Label("연결", systemImage: "link") }
+                .tag("connections")
             GeneralSettingsView(settings: env.settings, env: env)
                 .tabItem { Label("일반", systemImage: "gearshape") }
                 .tag("general")
@@ -30,6 +22,10 @@ struct SettingsView: View {
         .frame(width: 580, height: 480)
         .padding([.horizontal, .bottom], 20)
         .padding(.top, 8)
+        .onAppear {
+            // The tab was called "api" before connections.
+            if tab == "api" { tab = "connections" }
+        }
     }
 }
 
@@ -52,7 +48,8 @@ enum EditorTarget: Identifiable {
 struct ItemsSettingsView: View {
     let env: AppEnvironment
     @ObservedObject private var store: ItemStore
-    @ObservedObject private var data: MarketDataService
+    @ObservedObject private var data: MarketDataHub
+    @ObservedObject private var connections: ConnectionStore
     @State private var selection: UUID?
     @State private var editor: EditorTarget?
 
@@ -60,6 +57,7 @@ struct ItemsSettingsView: View {
         self.env = env
         self.store = env.store
         self.data = env.data
+        self.connections = env.connections
     }
 
     var body: some View {
@@ -83,7 +81,9 @@ struct ItemsSettingsView: View {
             .listStyle(.bordered(alternatesRowBackgrounds: true))
             .overlay {
                 if store.items.isEmpty {
-                    Text("아직 항목이 없습니다.\n아래 + 버튼으로 '주가' 또는 '자산' 항목을 추가하세요.")
+                    Text(connections.isEmpty
+                         ? "아직 연결이 없습니다.\n먼저 '연결' 탭에서 증권사를 연결하세요."
+                         : "아직 항목이 없습니다.\n아래 + 버튼으로 '주가' 또는 '자산' 항목을 추가하세요.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                 }
@@ -97,6 +97,7 @@ struct ItemsSettingsView: View {
                     Label("추가", systemImage: "plus")
                 }
                 .fixedSize()
+                .disabled(connections.isEmpty)
 
                 Button {
                     if let selection, let item = store.item(selection) { editor = .edit(item) }
@@ -140,20 +141,19 @@ struct ItemsSettingsView: View {
     @ViewBuilder
     private func row(_ item: MenuItemConfig) -> some View {
         HStack(spacing: 10) {
+            let service = data.service(for: item)
             switch item.kind {
             case .stock(let config):
                 Image(systemName: "chart.xyaxis.line").foregroundStyle(.blue).frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("주가 · \(config.displayName?.nilIfBlank ?? data.stockInfo[config.symbol]?.name ?? config.symbol)")
-                    Text(stockDetail(config))
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text("주가 · \(config.displayName?.nilIfBlank ?? service?.stockInfo[config.symbol]?.name ?? config.symbol)")
+                    detail(item, stockDetail(config))
                 }
             case .asset(let config):
                 Image(systemName: "wallet.pass").foregroundStyle(.orange).frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("자산" + (config.label.nilIfBlank.map { " · \($0)" } ?? ""))
-                    Text(assetDetail(config))
-                        .font(.caption).foregroundStyle(.secondary)
+                    detail(item, assetDetail(config, service: service))
                 }
             }
             Spacer()
@@ -177,8 +177,21 @@ struct ItemsSettingsView: View {
         ].compactMap { $0 }.joined(separator: " · ")
     }
 
-    private func assetDetail(_ config: AssetItemConfig) -> String {
-        let account = data.accounts.first { $0.accountSeq == config.accountSeq }?.maskedNumber ?? "기본 계좌"
+    /// The item's settings, led by its connection when there is more than one, or a warning
+    /// when its connection is gone.
+    @ViewBuilder
+    private func detail(_ item: MenuItemConfig, _ text: String) -> some View {
+        if let connection = connections.resolve(item.connectionID) {
+            Text(connections.connections.count > 1 ? "\(ConnectionPicker.title(connection)) · \(text)" : text)
+                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            Text("⚠︎ 연결 없음 · 편집해서 연결을 지정하세요")
+                .font(.caption).foregroundStyle(.orange)
+        }
+    }
+
+    private func assetDetail(_ config: AssetItemConfig, service: MarketDataService?) -> String {
+        let account = service?.accounts.first { $0.accountSeq == config.accountSeq }?.maskedNumber ?? "기본 계좌"
         return [
             account,
             config.mode.title,
@@ -196,6 +209,8 @@ struct StockItemEditor: View {
     var dismiss: () -> Void
 
     @ObservedObject private var universe: StockUniverse
+    @ObservedObject private var connections: ConnectionStore
+    @State private var connectionID: UUID?
     @State private var query = ""
     @State private var selectedSymbol: String?
     @State private var selectedName: String?
@@ -212,14 +227,28 @@ struct StockItemEditor: View {
         self.existing = existing
         self.dismiss = dismiss
         self.universe = env.universe
+        self.connections = env.connections
+        _connectionID = State(initialValue: Self.initialConnection(existing, env: env))
         if case .stock(let config)? = existing?.kind {
             _selectedSymbol = State(initialValue: config.symbol)
-            _selectedName = State(initialValue: env.data.stockInfo[config.symbol]?.name)
+            _selectedName = State(initialValue: existing.flatMap(env.data.service(for:))?.stockInfo[config.symbol]?.name)
             _displayName = State(initialValue: config.displayName ?? "")
             _showName = State(initialValue: config.showName)
             _showChange = State(initialValue: config.showChange)
             _displayCurrency = State(initialValue: config.displayCurrency)
         }
+    }
+
+    /// The item's connection, or the first one for a new item.
+    static func initialConnection(_ existing: MenuItemConfig?, env: AppEnvironment) -> UUID? {
+        guard let existing else { return env.connections.connections.first?.id }
+        return env.connections.resolve(existing.connectionID)?.id
+    }
+
+    private var service: MarketDataService? { env.data.service(forConnection: connectionID) }
+
+    private func loadUniverse() {
+        if let client = service?.client { universe.ensureLoaded(using: client) }
     }
 
     private var results: [StockUniverse.Entry] { universe.search(query) }
@@ -230,7 +259,7 @@ struct StockItemEditor: View {
     private var selectedIsUS: Bool {
         guard let symbol = selectedSymbol else { return false }
         if let entry = universe.entries.first(where: { $0.symbol == symbol }) { return entry.isUS }
-        if let info = env.data.stockInfo[symbol] { return info.currency == .usd }
+        if let info = service?.stockInfo[symbol] { return info.currency == .usd }
         return symbol.range(of: "^[0-9][0-9A-Z]{5}$", options: .regularExpression) == nil
     }
 
@@ -240,7 +269,7 @@ struct StockItemEditor: View {
     }
 
     private var originalName: String? {
-        originalSymbol.flatMap { env.data.stockInfo[$0]?.name }
+        originalSymbol.flatMap { service?.stockInfo[$0]?.name }
     }
 
     /// The query itself as a symbol, for stocks missing from the search list.
@@ -253,6 +282,11 @@ struct StockItemEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(existing == nil ? "주가 항목 추가" : "주가 항목 편집").font(.title3.weight(.semibold))
+
+            Form {
+                ConnectionPicker(connections: connections, selection: $connectionID)
+            }
+            .formStyle(.columns)
 
             HStack(spacing: 6) {
                 Text(existing == nil ? "선택한 종목" : "종목").foregroundStyle(.secondary)
@@ -333,18 +367,19 @@ struct StockItemEditor: View {
                 Button("취소", action: dismiss).keyboardShortcut(.cancelAction)
                 Button(existing == nil ? "추가" : "저장", action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selectedSymbol == nil || isValidating)
+                    .disabled(selectedSymbol == nil || service == nil || isValidating)
             }
         }
         .padding(20)
         .frame(width: 460)
-        .onAppear { universe.ensureLoaded() }
+        .onAppear(perform: loadUniverse)
+        .onChange(of: connectionID) { _, _ in loadUniverse() }
         .onChange(of: listSelection) { _, symbol in
             // Clicking empty space clears the list selection; keep the chosen stock.
             guard let symbol else { return }
             selectedSymbol = symbol
             selectedName = results.first { $0.symbol == symbol }?.name
-                ?? env.data.stockInfo[symbol]?.name
+                ?? service?.stockInfo[symbol]?.name
             error = nil
         }
     }
@@ -360,8 +395,8 @@ struct StockItemEditor: View {
     }
 
     private func save() {
-        guard let symbol = selectedSymbol else { return }
-        let item = MenuItemConfig(id: existing?.id ?? UUID(), kind: .stock(makeConfig(symbol: symbol)))
+        guard let symbol = selectedSymbol, let service else { return }
+        let item = MenuItemConfig(id: existing?.id ?? UUID(), kind: .stock(makeConfig(symbol: symbol)), connectionID: connectionID)
 
         // A newly chosen symbol that isn't in the search list is checked against the API first.
         if symbol != originalSymbol, !universe.entries.contains(where: { $0.symbol == symbol }) {
@@ -369,7 +404,7 @@ struct StockItemEditor: View {
             Task {
                 defer { isValidating = false }
                 do {
-                    let found = try await env.client.stocks([symbol])
+                    let found = try await service.client.stocks([symbol])
                     guard !found.isEmpty else { error = "종목을 찾을 수 없습니다: \(symbol)"; return }
                     env.store.upsert(item)
                     dismiss()
@@ -391,7 +426,9 @@ struct AssetItemEditor: View {
     let existing: MenuItemConfig?
     var dismiss: () -> Void
 
-    @ObservedObject private var data: MarketDataService
+    @ObservedObject private var data: MarketDataHub
+    @ObservedObject private var connections: ConnectionStore
+    @State private var connectionID: UUID?
     @State private var label = ""
     @State private var accountSeq: Int64?
     @State private var mode: AssetMode = .total
@@ -405,6 +442,8 @@ struct AssetItemEditor: View {
         self.existing = existing
         self.dismiss = dismiss
         self.data = env.data
+        self.connections = env.connections
+        _connectionID = State(initialValue: StockItemEditor.initialConnection(existing, env: env))
         if case .asset(let config)? = existing?.kind {
             _label = State(initialValue: config.label)
             _accountSeq = State(initialValue: config.accountSeq)
@@ -422,11 +461,12 @@ struct AssetItemEditor: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Form {
+                ConnectionPicker(connections: connections, selection: $connectionID)
                 TextField("라벨", text: $label, prompt: Text("선택 (예: 💰, 주식)"))
                 HStack {
                     Picker("계좌", selection: $accountSeq) {
                         Text("기본 계좌 (첫 번째)").tag(Int64?.none)
-                        ForEach(data.accounts) { account in
+                        ForEach(service?.accounts ?? []) { account in
                             Text("\(account.maskedNumber) · \(account.accountType == "BROKERAGE" ? "종합매매" : account.accountType)")
                                 .tag(Int64?.some(account.accountSeq))
                         }
@@ -467,25 +507,33 @@ struct AssetItemEditor: View {
                         label: label, accountSeq: accountSeq, mode: mode,
                         afterCost: afterCost, colorByTrend: colorByTrend
                     )
-                    env.store.upsert(MenuItemConfig(id: existing?.id ?? UUID(), kind: .asset(config)))
+                    env.store.upsert(MenuItemConfig(id: existing?.id ?? UUID(), kind: .asset(config), connectionID: connectionID))
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(service == nil)
             }
         }
         .padding(20)
         .frame(width: 460)
-        .task {
-            guard data.accounts.isEmpty else { return }
+        .onChange(of: connectionID) { _, _ in
+            // Accounts belong to a connection, so another connection starts from its first.
+            accountSeq = nil
+        }
+        .task(id: connectionID) {
+            error = nil
+            guard let service, service.accounts.isEmpty else { return }
             loadingAccounts = true
             defer { loadingAccounts = false }
             do {
-                _ = try await data.loadAccounts()
+                _ = try await service.loadAccounts()
             } catch {
                 self.error = "계좌 목록을 불러오지 못했습니다: \(error.localizedDescription)"
             }
         }
     }
+
+    private var service: MarketDataService? { data.service(forConnection: connectionID) }
 }
 
 // MARK: - General
@@ -528,7 +576,7 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                Text("데이터 출처: 토스증권 Open API (REST). 시세는 갱신 주기마다 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다.")
+                Text("데이터 출처: 각 연결의 증권사 Open API (REST). 시세는 갱신 주기마다 연결별로 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Invest Stats 종료") { env.quit() }
             }

@@ -15,10 +15,10 @@ struct StockPopoverView: View {
     @State private var chartError: String?
     @State private var selectedDate: Date?
 
-    init(itemID: UUID, env: AppEnvironment) {
+    init(itemID: UUID, env: AppEnvironment, data: MarketDataService) {
         self.itemID = itemID
         self.env = env
-        self.data = env.data
+        self.data = data
         self.store = env.store
         _rangeRaw = AppStorage(wrappedValue: ChartRange.day.rawValue, "chartRange.\(itemID.uuidString)")
     }
@@ -41,7 +41,7 @@ struct StockPopoverView: View {
     private func setDisplayCurrency(_ value: PriceDisplayCurrency) {
         guard var config else { return }
         config.displayCurrency = value
-        store.upsert(MenuItemConfig(id: itemID, kind: .stock(config)))
+        store.updateKind(itemID, .stock(config))
     }
 
     var body: some View {
@@ -59,7 +59,7 @@ struct StockPopoverView: View {
                 Text("삭제된 항목입니다.").foregroundStyle(.secondary)
             }
             Divider()
-            PopoverFooter(itemID: itemID, env: env)
+            PopoverFooter(itemID: itemID, env: env, data: data)
         }
         .padding(14)
         .frame(width: 380)

@@ -22,6 +22,14 @@ An asset item shows the profit on an account's holdings as `{profit}₩ ({rate}%
 - **US holdings:** converted to KRW at the base rate.
 - **Profit colors:** each item can color its profit and rate by their sign, red for a gain and blue for a loss by default. The color convention is set in the general settings.
 
+### Connections
+
+Each item reads from a connection: a provider (Toss Securities for now) and its API keys. Connections are managed in the **연결** (Connections) settings tab.
+
+- **Several connections:** add as many as you like, including more than one for the same provider, for example your own account and a family member's. Each one needs its own keys, since two connections with the same keys would keep invalidating each other's token.
+- **Per item:** the stock and asset editors ask which connection the item reads from.
+- **iCloud sync:** in release builds, a connection can sync through the iCloud Keychain, together with its cached token. It then shows up on your other Macs signed in to the same Apple Account.
+
 ### Any number of items
 
 Add as many stock and asset items as you like, and remove them from the settings window, the item's right-click menu, or the `…` menu in its popover.
@@ -54,7 +62,7 @@ Download `InvestStats-<version>.zip` from [Releases](https://github.com/0x1f320/
 
 The app used to be called TossBar, with the bundle id `dev.tossbar.TossBar`. TossBar builds can't update themselves to Invest Stats, so install it by hand and delete `TossBar.app`.
 
-- **Kept:** on its first launch, Invest Stats copies TossBar's settings, items and menu bar positions. Keys in `~/Library/Application Support/TossBar/` and in the iCloud Keychain keep working.
+- **Kept:** on its first launch, Invest Stats copies TossBar's settings, items and menu bar positions. Keys in `~/Library/Application Support/TossBar/` and in the iCloud Keychain keep working; they become a connection, as described below.
 - **Turn on again:** **Allow in Menu Bar** on macOS 26 and **로그인 시 실행** (launch at login), since macOS tracks both per app.
 
 Every release, pre-releases included, is listed in [CHANGELOG.md](CHANGELOG.md).
@@ -76,11 +84,15 @@ scripts/test.sh
 ## First launch
 
 1. **Register a client:** in Toss Securities WTS (the PC web app), open 설정 > Open API and register a client. Add this Mac's public IP to the allowed IPs; requests from other IPs fail with 403.
-2. **Enter the keys:** enter the Client ID and Secret in the window that opens on first launch, then click **저장 및 연결 테스트** (save and test).
-3. **Storage:** by default the keys are stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). They are not stored in the login Keychain, so rebuilding the app never asks for your password.
-   - **Share with your other Macs:** in release builds, turn on **iCloud 키체인에 저장해 같은 Apple 계정의 다른 Mac 과 공유** before saving. The keys and the cached token move to the iCloud Keychain. On another Mac signed in to the same Apple Account, Invest Stats offers the shared keys on first launch.
+2. **Add a connection:** enter the Client ID and Secret in the window that opens on first launch, then click **저장 및 연결 테스트** (save and test). Add more connections later in the **연결** settings tab.
+3. **Storage:** by default a connection is stored in `~/Library/Application Support/TossBar/`, readable only by your user (`0600`). It is not stored in the login Keychain, so rebuilding the app never asks for your password.
+   - **Sync with your other Macs:** in release builds, turn on **iCloud 키체인으로 이 연결을 다른 Mac 과 동기화** before saving. The connection and its cached token move to the iCloud Keychain and appear on your other Macs signed in to the same Apple Account. Turning sync off again keeps the connection on this Mac only and removes it from the others.
    - Each Mac still needs its public IP in the client's allowed IPs.
 4. **Use a dedicated client:** Toss Securities keeps only one valid token per client. If another tool uses the same keys, each will keep invalidating the other's token.
+
+### Upgrading from a version without connections
+
+The single set of keys that earlier versions saved becomes a connection on the first launch, in the same place (this Mac or the iCloud Keychain) and with the same cached token, and existing items use it. Macs that migrate the same keys arrive at the same connection, so a synced connection is never duplicated.
 
 ## Troubleshooting
 
@@ -102,16 +114,16 @@ Your public IP changed or isn't registered. Add it in WTS > 설정 > Open API.
 
 | Path | Role |
 | --- | --- |
-| `Sources/TossBar/API` | REST client: OAuth2 token cache, per-group rate limiting, 429 and 401 retries |
-| `Sources/TossBar/Data` | Shared polling service, chart and sparkline data, KRW conversion, the searchable stock list |
+| `Sources/TossBar/API` | REST client, one per connection: OAuth2 token cache, per-group rate limiting, 429 and 401 retries |
+| `Sources/TossBar/Data` | Polling loop and one data service per connection, chart and sparkline data, KRW conversion, the searchable stock list |
 | `Sources/TossBar/StatusBar` | One `NSStatusItem` and popover per item, synced with the item list |
 | `Sources/TossBar/Update` | GitHub Releases check, version comparison, download, signature check and install |
-| `Sources/TossBar/Store` | Item configs and settings (UserDefaults), API keys and token (files) |
+| `Sources/TossBar/Store` | Item configs and settings (UserDefaults), connections and tokens (files or the iCloud Keychain) |
 | `Sources/TossBar/Views` | SwiftUI popovers, settings and onboarding |
 
 Some design choices:
 
-- **Batched prices:** prices for every item are fetched in one request per refresh, so many items cost the same as one.
+- **Batched prices:** prices for every item of a connection are fetched in one request per refresh, so many items cost the same as one.
 - **Stable status items:** each status item has a stable `autosaveName` and is never recreated on edit. This keeps its position with macOS and with menu bar managers.
 - **Raw API figures:** profit figures come straight from the API's own calculations, including the after-cost values. Only the USD to KRW conversion is done locally.
 

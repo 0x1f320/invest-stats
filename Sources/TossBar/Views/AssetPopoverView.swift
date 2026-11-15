@@ -12,10 +12,10 @@ struct AssetPopoverView: View {
     @State private var expanded: Set<String> = []
     @State private var sparklines: [String: [Double]] = [:]
 
-    init(itemID: UUID, env: AppEnvironment) {
+    init(itemID: UUID, env: AppEnvironment, data: MarketDataService) {
         self.itemID = itemID
         self.env = env
-        self.data = env.data
+        self.data = data
         self.store = env.store
     }
 
@@ -28,7 +28,7 @@ struct AssetPopoverView: View {
     private func setAfterCost(_ value: Bool) {
         guard var config else { return }
         config.afterCost = value
-        store.upsert(MenuItemConfig(id: itemID, kind: .asset(config)))
+        store.updateKind(itemID, .asset(config))
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct AssetPopoverView: View {
                 Text("삭제된 항목입니다.").foregroundStyle(.secondary)
             }
             Divider()
-            PopoverFooter(itemID: itemID, env: env)
+            PopoverFooter(itemID: itemID, env: env, data: data)
         }
         .padding(14)
         .frame(width: 440)

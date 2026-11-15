@@ -5,7 +5,8 @@ import Testing
 @Suite("Secret storage")
 struct SecretStoreTests {
     @Test func locationDefaultsToLocal() {
-        // Existing installs have no saved choice and must keep reading their local files.
+        // Installs that never chose a location kept their keys in local files, which the
+        // migration to connections must read from.
         #expect(SecretLocation.parse(nil) == .local)
         #expect(SecretLocation.parse("") == .local)
         #expect(SecretLocation.parse("somethingElse") == .local)

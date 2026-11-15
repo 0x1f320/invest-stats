@@ -21,7 +21,7 @@ final class StatusBarManager {
         Publishers.Merge3(
             env.data.objectWillChange,
             env.settings.objectWillChange,
-            env.credentials.objectWillChange
+            env.connections.objectWillChange
         )
         .debounce(for: .milliseconds(80), scheduler: RunLoop.main)
         .sink { [weak self] _ in self?.renderAll() }
@@ -77,8 +77,11 @@ final class StatusBarManager {
 
     private func dumpDiagnostics() {
         print("[diag] \(Date()) items=\(controllers.count) placeholder=\(placeholder != nil)")
-        if let error = env.data.errorMessage { print("[diag]   error=\(error)") }
-        for (symbol, error) in env.data.symbolErrors { print("[diag]   \(symbol) error=\(error)") }
+        for (id, service) in env.data.services {
+            let name = env.connections.connection(id)?.connection.displayName ?? id.uuidString
+            if let error = service.errorMessage { print("[diag]   [\(name)] error=\(error)") }
+            for (symbol, error) in service.symbolErrors { print("[diag]   [\(name)] \(symbol) error=\(error)") }
+        }
         for controller in controllers.values {
             print("[diag]   " + controller.diagnostics)
         }

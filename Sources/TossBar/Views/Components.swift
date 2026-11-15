@@ -58,10 +58,10 @@ struct PopoverFooter: View {
     let env: AppEnvironment
     @ObservedObject var data: MarketDataService
 
-    init(itemID: UUID, env: AppEnvironment) {
+    init(itemID: UUID, env: AppEnvironment, data: MarketDataService) {
         self.itemID = itemID
         self.env = env
-        self.data = env.data
+        self.data = data
     }
 
     var body: some View {
@@ -80,7 +80,7 @@ struct PopoverFooter: View {
                 ProgressView().controlSize(.mini)
             }
             Button {
-                env.data.refreshSoon()
+                data.refreshSoon()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
@@ -101,5 +101,28 @@ struct PopoverFooter: View {
             .fixedSize()
         }
         .font(.caption)
+    }
+}
+
+/// Popover for an item whose connection was deleted, or hasn't synced to this Mac yet.
+struct MissingConnectionPopoverView: View {
+    let itemID: UUID
+    let env: AppEnvironment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("연결을 찾을 수 없습니다", systemImage: "link.badge.plus")
+                .font(.headline)
+            Text("이 항목이 쓰던 연결이 삭제되었거나 아직 이 Mac 에 동기화되지 않았습니다. 항목을 편집해 다른 연결을 지정하세요.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("이 항목 편집…") { env.editItem(itemID) }
+                Spacer()
+                Button("이 항목 삭제", role: .destructive) { env.store.remove(itemID) }
+            }
+        }
+        .padding(14)
+        .frame(width: 320)
     }
 }

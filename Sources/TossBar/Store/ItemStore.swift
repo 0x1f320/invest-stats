@@ -99,11 +99,54 @@ enum ItemKind: Codable, Hashable {
 struct MenuItemConfig: Codable, Hashable, Identifiable {
     var id = UUID()
     var kind: ItemKind
+    /// The connection the item reads from. nil, in items saved before connections
+    /// existed, means the first connection.
+    var connectionID: UUID?
 
     var typeTitle: String {
         switch kind {
         case .stock: return "주가"
         case .asset: return "자산"
+        }
+    }
+}
+
+extension MenuItemConfig {
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, connectionID
+    }
+
+    /// Fills defaults for keys that older saved configs don't have.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decode(ItemKind.self, forKey: .kind)
+        connectionID = try c.decodeIfPresent(UUID.self, forKey: .connectionID)
+    }
+}
+
+extension Array where Element == MenuItemConfig {
+    /// Symbols used by stock items, without duplicates.
+    var stockSymbols: [String] {
+        var seen = Set<String>()
+        return compactMap {
+            if case .stock(let config) = $0.kind, seen.insert(config.symbol).inserted { return config.symbol }
+            return nil
+        }
+    }
+
+    /// Whether any stock item shows prices in KRW, which needs the USD/KRW rate.
+    var needsUsdKrwForStocks: Bool {
+        contains {
+            if case .stock(let config) = $0.kind { return config.displayCurrency == .krw }
+            return false
+        }
+    }
+
+    var assetConfigs: [AssetItemConfig] {
+        compactMap {
+            if case .asset(let config) = $0.kind { return config }
+            return nil
         }
     }
 }
@@ -139,31 +182,24 @@ final class ItemStore: ObservableObject {
         }
     }
 
+    /// Changes an item's settings from its popover, keeping its connection.
+    func updateKind(_ id: UUID, _ kind: ItemKind) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].kind = kind
+    }
+
     func remove(_ id: UUID) {
         items.removeAll { $0.id == id }
     }
 
-    /// Symbols used by stock items, without duplicates.
-    var stockSymbols: [String] {
-        var seen = Set<String>()
-        return items.compactMap {
-            if case .stock(let config) = $0.kind, seen.insert(config.symbol).inserted { return config.symbol }
-            return nil
-        }
-    }
-
-    /// Whether any stock item shows prices in KRW, which needs the USD/KRW rate.
-    var needsUsdKrwForStocks: Bool {
-        items.contains {
-            if case .stock(let config) = $0.kind { return config.displayCurrency == .krw }
-            return false
-        }
-    }
-
-    var assetConfigs: [AssetItemConfig] {
-        items.compactMap {
-            if case .asset(let config) = $0.kind { return config }
-            return nil
+    /// Points items that don't name a connection at `connectionID`. Used once, when the
+    /// keys saved by an earlier version become a connection.
+    func assignConnection(_ connectionID: UUID) {
+        guard items.contains(where: { $0.connectionID == nil }) else { return }
+        items = items.map { item in
+            var item = item
+            if item.connectionID == nil { item.connectionID = connectionID }
+            return item
         }
     }
 

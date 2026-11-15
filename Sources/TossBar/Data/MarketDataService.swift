@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum ChartRange: String, CaseIterable, Identifiable {
@@ -80,8 +81,8 @@ struct DailySnapshot {
     let fetchedAt: Date
 }
 
-/// Data shared by every menu bar item, plus the polling loop that refreshes it.
-/// When several items show the same stock, the API is still called once per refresh.
+/// Data for the menu bar items of one connection. When several items show the same stock,
+/// the API is still called once per refresh. `MarketDataHub` runs the polling loop.
 @MainActor
 final class MarketDataService: ObservableObject {
     @Published private(set) var quotes: [String: PriceQuote] = [:]
@@ -95,11 +96,11 @@ final class MarketDataService: ObservableObject {
     @Published private(set) var symbolErrors: [String: String] = [:]
     @Published private(set) var isRefreshing = false
 
-    private let client: TossAPIClient
-    private let store: ItemStore
-    private let settings: AppSettings
+    let connectionID: UUID
+    let client: TossAPIClient
+    /// The items that use this connection.
+    private let items: @MainActor () -> [MenuItemConfig]
 
-    private var loopTask: Task<Void, Never>?
     private var lastFxFetch: Date?
     private var lastAccountsFetch: Date?
     private var lastStockInfoAttempt: [String: Date] = [:]
@@ -107,26 +108,15 @@ final class MarketDataService: ObservableObject {
     private var sparkCache: [String: (fetchedAt: Date, values: [Double])] = [:]
     private var sparkInFlight: [String: Task<[Double]?, Never>] = [:]
 
-    init(client: TossAPIClient, store: ItemStore, settings: AppSettings) {
+    init(connectionID: UUID, client: TossAPIClient, items: @escaping @MainActor () -> [MenuItemConfig]) {
+        self.connectionID = connectionID
         self.client = client
-        self.store = store
-        self.settings = settings
+        self.items = items
     }
 
     // MARK: Lifecycle
 
-    func start() {
-        loopTask?.cancel()
-        loopTask = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.refresh()
-                let interval = self?.settings.refreshInterval ?? 10
-                try? await Task.sleep(nanoseconds: UInt64(max(interval, 3) * 1_000_000_000))
-            }
-        }
-    }
-
-    /// Drops everything cached and restarts. Called when the API keys change.
+    /// Drops everything cached and refreshes. Called when the connection's keys change.
     func reset() {
         quotes = [:]
         daily = [:]
@@ -139,7 +129,7 @@ final class MarketDataService: ObservableObject {
         symbolErrors = [:]
         chartCache = [:]
         sparkCache = [:]
-        start()
+        refreshSoon()
     }
 
     func refreshSoon() {
@@ -185,8 +175,9 @@ final class MarketDataService: ObservableObject {
         }
 
         var errors: [String] = []
-        let symbols = store.stockSymbols
-        let assetConfigs = store.assetConfigs
+        let items = items()
+        let symbols = items.stockSymbols
+        let assetConfigs = items.assetConfigs
 
         // 0) Accounts. ACCOUNT allows 1 request per second, so cache for 10 minutes.
         if !assetConfigs.isEmpty,
@@ -252,7 +243,7 @@ final class MarketDataService: ObservableObject {
         }
 
         // 4) USD/KRW rate for US holdings and stock items shown in KRW, cached for a minute.
-        if !assetConfigs.isEmpty || store.needsUsdKrwForStocks,
+        if !assetConfigs.isEmpty || items.needsUsdKrwForStocks,
            lastFxFetch.map({ Date().timeIntervalSince($0) > 60 }) ?? true {
             do {
                 usdKrw = try await client.usdKrwRate()
@@ -359,5 +350,102 @@ final class MarketDataService: ObservableObject {
     /// the session day it belongs to.
     private static func sessionTime(_ candle: Candle) -> Date {
         candle.timestamp.addingTimeInterval(-60)
+    }
+}
+
+/// One `MarketDataService` per connection, kept in step with the connection list, and the
+/// polling loop that refreshes them all. Changes in any service are republished here, so
+/// the menu bar redraws from one place.
+@MainActor
+final class MarketDataHub: ObservableObject {
+    private(set) var services: [UUID: MarketDataService] = [:]
+
+    private let connections: ConnectionStore
+    private let store: ItemStore
+    private let settings: AppSettings
+    private var known: [UUID: StoredConnection] = [:]
+    private var forwarders: [UUID: AnyCancellable] = [:]
+    private var cancellables = Set<AnyCancellable>()
+    private var loopTask: Task<Void, Never>?
+
+    init(connections: ConnectionStore, store: ItemStore, settings: AppSettings) {
+        self.connections = connections
+        self.store = store
+        self.settings = settings
+        connections.$connections
+            .sink { [weak self] list in self?.sync(list) }
+            .store(in: &cancellables)
+    }
+
+    /// The service for an item's connection, or nil when the connection is gone.
+    func service(for item: MenuItemConfig) -> MarketDataService? {
+        connections.resolve(item.connectionID).flatMap { services[$0.id] }
+    }
+
+    func service(forConnection id: UUID?) -> MarketDataService? {
+        id.flatMap { services[$0] }
+    }
+
+    /// The items that read from a connection.
+    func items(for connectionID: UUID) -> [MenuItemConfig] {
+        store.items.filter { connections.resolve($0.connectionID)?.id == connectionID }
+    }
+
+    // MARK: Polling
+
+    func start() {
+        loopTask?.cancel()
+        loopTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshAll()
+                let interval = self?.settings.refreshInterval ?? 10
+                try? await Task.sleep(nanoseconds: UInt64(max(interval, 3) * 1_000_000_000))
+            }
+        }
+    }
+
+    func refreshSoon() {
+        Task { await refreshAll() }
+    }
+
+    /// Refreshes every connection that has items, side by side.
+    func refreshAll() async {
+        let active = services.values.filter { !items(for: $0.connectionID).isEmpty }
+        await withTaskGroup(of: Void.self) { group in
+            for service in active {
+                group.addTask { @MainActor in await service.refresh() }
+            }
+        }
+    }
+
+    // MARK: Connections
+
+    private func sync(_ list: [StoredConnection]) {
+        let ids = Set(list.map(\.id))
+        for id in services.keys where !ids.contains(id) {
+            services[id] = nil
+            forwarders[id] = nil
+        }
+        for stored in list {
+            if let service = services[stored.id] {
+                // Edited keys or a move to or from iCloud: drop what the old keys loaded.
+                if known[stored.id]?.connection.values != stored.connection.values {
+                    service.reset()
+                }
+            } else {
+                let client = connections.client(for: stored)
+                let id = stored.id
+                let service = MarketDataService(connectionID: id, client: client) { [weak self] in
+                    self?.items(for: id) ?? []
+                }
+                services[id] = service
+                forwarders[id] = service.objectWillChange.sink { [weak self] _ in
+                    self?.objectWillChange.send()
+                }
+                if loopTask != nil { service.refreshSoon() }
+            }
+        }
+        known = Dictionary(uniqueKeysWithValues: list.map { ($0.id, $0) })
+        objectWillChange.send()
     }
 }

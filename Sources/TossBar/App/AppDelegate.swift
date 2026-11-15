@@ -16,8 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         env.data.start()
         env.updater.start()
 
-        // First launch (no keys yet): ask for the API keys.
-        if !env.credentials.isConfigured {
+        // First launch (no connection yet, here or in iCloud): set one up.
+        if env.connections.isEmpty {
             showOnboarding()
         }
     }
@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func showSettings() {
-        if !env.credentials.isConfigured {
+        if env.connections.isEmpty {
             showOnboarding()
             return
         }

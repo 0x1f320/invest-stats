@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Where the API keys and the cached access token are kept on this Mac.
+/// Where a connection and its cached access token are kept.
 enum SecretLocation: String, Sendable {
     /// User-only files under `~/Library/Application Support/TossBar/`. The default.
     case local
@@ -9,16 +9,13 @@ enum SecretLocation: String, Sendable {
     /// in builds signed with the provisioning profile that grants a keychain access group.
     case iCloudKeychain
 
-    private static let key = "secretLocation"
+    /// The `UserDefaults` key where earlier versions saved the location of their one set
+    /// of keys. Read only to migrate those keys into a connection.
+    static let legacyKey = "secretLocation"
 
-    /// The saved choice. Anything missing or unknown means `.local`.
+    /// A saved location. Anything missing or unknown means `.local`.
     static func parse(_ raw: String?) -> SecretLocation {
         raw.flatMap(SecretLocation.init(rawValue:)) ?? .local
-    }
-
-    static var current: SecretLocation {
-        get { parse(UserDefaults.standard.string(forKey: key)) }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
     }
 }
 
@@ -34,7 +31,7 @@ enum SecretStoreError: LocalizedError {
     }
 }
 
-/// Storage for the API keys and the cached access token.
+/// Storage for connections and their cached access tokens.
 ///
 /// By default values live in user-only files under `~/Library/Application Support/TossBar/`
 /// (directory `0700`, files `0600`). The login Keychain is avoided because it asks for the
@@ -58,12 +55,12 @@ enum SecretStore {
         return base
     }
 
-    static func read<T: Decodable>(_ type: T.Type, name: String, from location: SecretLocation = .current) -> T? {
+    static func read<T: Decodable>(_ type: T.Type, name: String, from location: SecretLocation) -> T? {
         guard let data = readData(name: name, from: location) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
-    static func write<T: Encodable>(_ value: T, name: String, to location: SecretLocation = .current) throws {
+    static func write<T: Encodable>(_ value: T, name: String, to location: SecretLocation) throws {
         let data = try JSONEncoder().encode(value)
         switch location {
         case .local: try LocalFiles.write(data, name: name)
@@ -71,10 +68,18 @@ enum SecretStore {
         }
     }
 
-    static func delete(name: String, from location: SecretLocation = .current) {
+    static func delete(name: String, from location: SecretLocation) {
         switch location {
         case .local: LocalFiles.delete(name: name)
         case .iCloudKeychain: SyncedKeychain.delete(name: name)
+        }
+    }
+
+    /// The names of every value saved in `location`.
+    static func names(in location: SecretLocation) -> [String] {
+        switch location {
+        case .local: return LocalFiles.names()
+        case .iCloudKeychain: return SyncedKeychain.names()
         }
     }
 
@@ -106,6 +111,11 @@ enum SecretStore {
 
         static func delete(name: String) {
             try? FileManager.default.removeItem(at: url(name))
+        }
+
+        static func names() -> [String] {
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+            return files.filter { $0.hasSuffix(".json") }.map { String($0.dropLast(".json".count)) }
         }
     }
 }
@@ -166,23 +176,33 @@ enum SyncedKeychain {
         guard isAvailable else { return }
         SecItemDelete(query(name) as CFDictionary)
     }
+
+    /// The names of every item this app saved, from this Mac and the user's other Macs.
+    static func names() -> [String] {
+        guard isAvailable else { return [] }
+        let q: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrSynchronizable: kCFBooleanTrue!,
+            kSecUseDataProtectionKeychain: true,
+            kSecReturnAttributes: true,
+            kSecMatchLimit: kSecMatchLimitAll,
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess,
+              let items = result as? [[String: Any]]
+        else { return [] }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
 }
 
+/// Keys for the Toss Securities API.
 struct Credentials: Codable, Hashable, Sendable {
     var clientId: String
     var clientSecret: String
 
-    static let fileName = "credentials"
-
-    static func load(from location: SecretLocation = .current) -> Credentials? {
-        SecretStore.read(Credentials.self, name: fileName, from: location)
-    }
-    static func save(_ value: Credentials, to location: SecretLocation = .current) throws {
-        try SecretStore.write(value, name: fileName, to: location)
-    }
-    static func clear(from location: SecretLocation = .current) {
-        SecretStore.delete(name: fileName, from: location)
-    }
+    /// Where earlier versions saved their one set of keys. Read only to migrate them.
+    static let legacyName = "credentials"
 }
 
 struct CachedToken: Codable, Hashable, Sendable {
@@ -190,7 +210,12 @@ struct CachedToken: Codable, Hashable, Sendable {
     var accessToken: String
     var expiresAt: Date
 
-    static let fileName = "access-token"
+    /// Where earlier versions saved the token for their one set of keys.
+    static let legacyName = "access-token"
+
+    static func name(for connection: UUID) -> String {
+        "access-token.\(connection.uuidString)"
+    }
 
     /// Whether the token can still be used for `clientId`. A token that expires within the
     /// next minute is treated as expired, so a request never goes out with one about to lapse.
@@ -198,13 +223,13 @@ struct CachedToken: Codable, Hashable, Sendable {
         self.clientId == clientId && expiresAt > now.addingTimeInterval(60)
     }
 
-    static func load(from location: SecretLocation = .current) -> CachedToken? {
-        SecretStore.read(CachedToken.self, name: fileName, from: location)
+    static func load(connection: UUID, from location: SecretLocation) -> CachedToken? {
+        SecretStore.read(CachedToken.self, name: name(for: connection), from: location)
     }
-    static func save(_ value: CachedToken, to location: SecretLocation = .current) {
-        try? SecretStore.write(value, name: fileName, to: location)
+    static func save(_ value: CachedToken, connection: UUID, to location: SecretLocation) {
+        try? SecretStore.write(value, name: name(for: connection), to: location)
     }
-    static func clear(from location: SecretLocation = .current) {
-        SecretStore.delete(name: fileName, from: location)
+    static func clear(connection: UUID, from location: SecretLocation) {
+        SecretStore.delete(name: name(for: connection), from: location)
     }
 }
