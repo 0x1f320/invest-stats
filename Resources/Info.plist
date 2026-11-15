@@ -6,6 +6,8 @@
     <string>ko</string>
     <key>CFBundleExecutable</key>
     <string>TossBar</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>dev.tossbar.TossBar</string>
     <key>CFBundleInfoDictionaryVersion</key>
