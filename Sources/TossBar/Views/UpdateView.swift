@@ -40,7 +40,7 @@ struct UpdateView: View {
                 .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("새 버전의 TossBar 가 있습니다").font(.title3.weight(.semibold))
+                    Text("새 버전의 Invest Stats 가 있습니다").font(.title3.weight(.semibold))
                     if offer.version.isPrerelease {
                         Text("프리릴리스")
                             .font(.caption.weight(.medium))
@@ -49,7 +49,7 @@ struct UpdateView: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                Text("TossBar \(offer.version.description) 을 설치할 수 있습니다. 현재 버전은 \(updater.currentVersion?.description ?? AppVersion.shortVersion) 입니다.")
+                Text("Invest Stats \(offer.version.description) 을 설치할 수 있습니다. 현재 버전은 \(updater.currentVersion?.description ?? AppVersion.shortVersion) 입니다.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -62,7 +62,7 @@ struct UpdateView: View {
         case .downloading(let fraction):
             progress("내려받는 중…", fraction: fraction)
         case .installing:
-            progress("설치 중… 완료되면 TossBar 가 다시 실행됩니다.", fraction: nil)
+            progress("설치 중… 완료되면 Invest Stats 가 다시 실행됩니다.", fraction: nil)
         case .idle, .failed:
             VStack(alignment: .leading, spacing: 10) {
                 if case .failed(let message) = updater.installState {

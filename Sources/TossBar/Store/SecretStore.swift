@@ -156,7 +156,7 @@ enum SyncedKeychain {
             var add = q
             add[kSecValueData] = data
             add[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlock
-            add[kSecAttrLabel] = "TossBar \(name)"
+            add[kSecAttrLabel] = "Invest Stats \(name)"
             status = SecItemAdd(add as CFDictionary, nil)
         }
         guard status == errSecSuccess else { throw SecretStoreError.keychain(status) }

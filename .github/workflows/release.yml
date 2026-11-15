@@ -87,7 +87,7 @@ jobs:
             exit 1
           fi
 
-          PROFILE="$RUNNER_TEMP/TossBar.provisionprofile"
+          PROFILE="$RUNNER_TEMP/InvestStats.provisionprofile"
           echo "$MACOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$PROFILE"
 
           ASC_KEY_PATH="$RUNNER_TEMP/notary_key.p8"

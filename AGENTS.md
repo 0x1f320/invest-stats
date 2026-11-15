@@ -77,10 +77,10 @@ git push --force-with-lease origin <branch>
 | --- | --- |
 | `swift build` | Debug build |
 | `scripts/test.sh` | Swift Testing suite; works with only the Command Line Tools installed |
-| `scripts/build-app.sh [release\|debug]` | Builds and ad-hoc signs `build/TossBar.app`; `TOSSBAR_SIGN_IDENTITY` signs with a real identity instead |
+| `scripts/build-app.sh [release\|debug]` | Builds and ad-hoc signs `build/Invest Stats.app`; `TOSSBAR_SIGN_IDENTITY` signs with a real identity instead |
 | `swift scripts/make-icon.swift` | Redraws the app icon and writes `Resources/AppIcon.icns`; commit the result |
 | `scripts/release.sh package <version>` | Builds, signs, notarizes and zips a release; run by semantic-release in CI |
-| `TOSSBAR_DIAG=1 build/TossBar.app/Contents/MacOS/TossBar` | Prints each menu bar item's state and API errors every 3 s |
+| `TOSSBAR_DIAG=1 "build/Invest Stats.app/Contents/MacOS/TossBar"` | Prints each menu bar item's state and API errors every 3 s |
 
 - **CI:** `.github/workflows/ci.yml` runs on every PR and on pushes to `dev` and `main`. It builds, runs the tests, builds the release bundle, and uploads it as an artifact.
 - **Release tooling:** `package.json` holds only semantic-release and its plugins, pinned to exact versions. The app itself never depends on Node.
@@ -96,8 +96,8 @@ git push --force-with-lease origin <branch>
 - **`main` publishes releases** such as `v1.2.0`.
 - **Only the changelog is committed back:** `@semantic-release/changelog` prepends the release notes to `CHANGELOG.md`, and `@semantic-release/git` commits it to the released branch as `chore(release): <version> [skip ci]`. `[skip ci]` keeps that push from starting another run. Don't edit `CHANGELOG.md` by hand.
 - **The version lives only in the tag.** `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, `CFBundleVersion` gets the workflow run number, and `TossBarReleaseVersion` gets the full version (`1.2.0-dev.3`) for the in-app updater.
-- **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
-- **Provisioning profile:** release builds embed the "TossBar Developer ID" profile for App ID `dev.tossbar.TossBar` and are signed with `Resources/TossBar.entitlements`, which grants the keychain access group for the iCloud Keychain. `scripts/release.sh` fails if the signed app lacks that entitlement. The profile expires with the Developer ID certificate; regenerate it in the developer portal whenever the certificate is renewed.
+- **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `InvestStats-<version>.zip`. Local builds stay ad-hoc signed.
+- **Provisioning profile:** release builds embed the "Invest Stats Developer ID" profile for App ID `me.0x1f320.invest-stats` and are signed with `Resources/TossBar.entitlements`, which grants the keychain access groups for the iCloud Keychain. The first group, `NAKQTCX98Y.me.0x1f320.invest-stats`, is where new items go; the second, `NAKQTCX98Y.dev.tossbar.TossBar`, keeps the items saved under the old bundle id readable. The profile allows both through `NAKQTCX98Y.*`. `scripts/release.sh` fails if the signed app lacks that entitlement. The profile expires with the Developer ID certificate; regenerate it in the developer portal whenever the certificate is renewed.
 - **Back-merge:** a release tag on `main` sits on a commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
 - **Release GitHub App:** "TossBar Release", owned by 0x1f320, with only Contents read and write, installed only on this repository, and the only bypass actor on the `dev` and `main` rulesets.
   - The workflow mints a one-hour installation token with `actions/create-github-app-token`. semantic-release uses it to push the changelog commit and tags and to publish the GitHub Release; `GITHUB_TOKEN` still opens and merges the back-merge PR.
@@ -136,7 +136,9 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Batch price requests across all items.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data keeps loading.
 - **Updates come only from this repository's GitHub Releases.**
-  - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `TossBar-<version>.zip` asset, so keep that asset name.
+  - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.
   - It installs a download only if its signature satisfies the running app's designated requirement (same bundle id and Developer ID team) and its `TossBarReleaseVersion` matches the tag.
   - Local builds have no `TossBarReleaseVersion`, so they never update themselves.
-- **Bundle id `dev.tossbar.TossBar` stays fixed.** Changing it resets user settings and the macOS "Allow in Menu Bar" entry.
+- **Bundle id `me.0x1f320.invest-stats` stays fixed.** Changing it resets user settings, the macOS "Allow in Menu Bar" entry and launch at login, and existing installs can't update across it.
+  - It replaced `dev.tossbar.TossBar` when the app was renamed from TossBar to Invest Stats. `LegacyDefaults` copies that domain's settings once on first launch.
+- **Internal names keep "TossBar":** the SwiftPM target and executable, `TossBarReleaseVersion`, the `TOSSBAR_*` variables, `~/Library/Application Support/TossBar/`, the keychain service and the `TossBar.<uuid>` autosave names. Users don't see them, and renaming the last three would orphan saved keys and positions.

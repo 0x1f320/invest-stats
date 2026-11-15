@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showOnboarding() {
         if onboardingWindow == nil {
             onboardingWindow = makeWindow(
-                title: "TossBar",
+                title: "Invest Stats",
                 rootView: OnboardingView(env: env) { [weak self] in
                     self?.onboardingWindow?.close()
                 }
@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         if settingsWindow == nil {
-            settingsWindow = makeWindow(title: "TossBar 설정", rootView: SettingsView(env: env))
+            settingsWindow = makeWindow(title: "Invest Stats 설정", rootView: SettingsView(env: env))
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showUpdate() {
         if updateWindow == nil {
             updateWindow = makeWindow(
-                title: "TossBar 업데이트",
+                title: "Invest Stats 업데이트",
                 rootView: UpdateView(updater: env.updater) { [weak self] in
                     self?.updateWindow?.close()
                 }

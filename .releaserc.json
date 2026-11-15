@@ -22,7 +22,7 @@
     }],
     ["@semantic-release/github", {
       "assets": [
-        { "path": "build/release/TossBar-*.zip" }
+        { "path": "build/release/InvestStats-*.zip" }
       ],
       "successComment": false,
       "failComment": false,

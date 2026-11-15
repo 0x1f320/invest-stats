@@ -46,7 +46,7 @@ struct CredentialsForm: View {
                     .disabled(!credentials.canSync)
                 Group {
                     if credentials.canSync {
-                        Text("다른 Mac 에서 TossBar 를 처음 열면 이 키를 바로 쓸 수 있습니다. 각 Mac 의 공인 IP 는 따로 허용 IP 로 등록해야 합니다. 변경 사항은 저장할 때 적용됩니다.")
+                        Text("다른 Mac 에서 Invest Stats 를 처음 열면 이 키를 바로 쓸 수 있습니다. 각 Mac 의 공인 IP 는 따로 허용 IP 로 등록해야 합니다. 변경 사항은 저장할 때 적용됩니다.")
                     } else {
                         Text("서명된 정식 릴리스 빌드에서만 사용할 수 있습니다.")
                     }
@@ -171,7 +171,7 @@ struct CredentialsHelp: View {
             Text("1. PC 웹(토스증권 WTS)에 로그인 → 설정 → Open API 에서 클라이언트를 등록합니다.")
             Text("2. 이 Mac 이 사용하는 공인 IP 를 허용 IP 로 등록해야 합니다. (미등록 시 403)")
             Text("3. 발급된 client_id / client_secret 을 아래에 입력하세요. 키는 기본적으로 이 Mac 사용자만 읽을 수 있는 파일(~/Library/Application Support/TossBar)에 저장되며, 원하면 iCloud 키체인에 저장해 다른 Mac 과 공유할 수 있습니다.")
-            Text("※ 토스증권은 클라이언트당 토큰을 1개만 유효하게 유지합니다. 같은 키를 다른 프로그램과 함께 쓰면 서로의 토큰이 무효화되니 TossBar 전용 키를 쓰는 것을 권장합니다. iCloud 로 공유한 Mac 끼리는 토큰도 함께 공유해 이를 줄이지만, 동기화가 늦으면 잠시 오류가 날 수 있습니다.")
+            Text("※ 토스증권은 클라이언트당 토큰을 1개만 유효하게 유지합니다. 같은 키를 다른 프로그램과 함께 쓰면 서로의 토큰이 무효화되니 Invest Stats 전용 키를 쓰는 것을 권장합니다. iCloud 로 공유한 Mac 끼리는 토큰도 함께 공유해 이를 줄이지만, 동기화가 늦으면 잠시 오류가 날 수 있습니다.")
                 .foregroundStyle(.secondary)
             Link("토스증권 Open API 문서 열기", destination: URL(string: "https://developers.tossinvest.com/docs")!)
         }
@@ -203,7 +203,7 @@ struct OnboardingView: View {
                     .font(.system(size: 40))
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("TossBar 시작하기").font(.title2.weight(.semibold))
+                    Text("Invest Stats 시작하기").font(.title2.weight(.semibold))
                     Text("토스증권 Open API 키를 입력하면 메뉴바에서 주가와 자산을 볼 수 있어요.")
                         .foregroundStyle(.secondary)
                 }

@@ -4,7 +4,7 @@
 # Usage:
 #   scripts/release.sh verify               Checks that signing and notarization are configured.
 #   scripts/release.sh package <version>    Builds, signs, notarizes and zips the app into
-#                                           build/release/TossBar-<version>.zip.
+#                                           build/release/InvestStats-<version>.zip.
 #   scripts/release.sh published <version>  Exposes the released version to later workflow steps.
 #
 # Environment (set by .github/workflows/release.yml):
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/build/TossBar.app"
+APP="$ROOT/build/Invest Stats.app"
 OUT="$ROOT/build/release"
 
 require_env() {
@@ -93,8 +93,8 @@ package() {
   xcrun stapler validate "$APP"
   spctl --assess --type execute --verbose=2 "$APP"
 
-  ditto -c -k --keepParent "$APP" "$OUT/TossBar-$version.zip"
-  echo "Packaged $OUT/TossBar-$version.zip"
+  ditto -c -k --keepParent "$APP" "$OUT/InvestStats-$version.zip"
+  echo "Packaged $OUT/InvestStats-$version.zip"
 }
 
 # macOS kills an app at launch when its restricted entitlements don't match the embedded

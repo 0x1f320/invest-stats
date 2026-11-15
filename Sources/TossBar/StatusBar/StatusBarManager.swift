@@ -58,8 +58,8 @@ final class StatusBarManager {
 
     static func showMenuBarBlockedAlert() {
         let alert = NSAlert()
-        alert.messageText = "TossBar 가 메뉴 막대에 표시되지 않고 있습니다"
-        alert.informativeText = "macOS 의 '메뉴 막대에서 허용' 설정에서 TossBar 가 꺼져 있습니다.\n시스템 설정 > 메뉴 막대 > '메뉴 막대에서 허용' 목록에서 TossBar 를 켜 주세요. 켜면 바로 나타납니다."
+        alert.messageText = "Invest Stats 가 메뉴 막대에 표시되지 않고 있습니다"
+        alert.informativeText = "macOS 의 '메뉴 막대에서 허용' 설정에서 Invest Stats 가 꺼져 있습니다.\n시스템 설정 > 메뉴 막대 > '메뉴 막대에서 허용' 목록에서 Invest Stats 를 켜 주세요. 켜면 바로 나타납니다."
         alert.addButton(withTitle: "시스템 설정 열기")
         alert.addButton(withTitle: "닫기")
         NSApp.activate(ignoringOtherApps: true)
@@ -118,13 +118,13 @@ final class StatusBarManager {
         if isEmpty, placeholder == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             item.autosaveName = "TossBar.placeholder"
-            item.button?.image = NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "TossBar")
+            item.button?.image = NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "Invest Stats")
             let menu = NSMenu()
             let add = NSMenuItem(title: "항목 추가 / 설정…", action: #selector(PlaceholderTarget.openSettings), keyEquivalent: ",")
             add.target = PlaceholderTarget.shared
             menu.addItem(add)
             menu.addItem(.separator())
-            let quit = NSMenuItem(title: "TossBar 종료", action: #selector(PlaceholderTarget.quit), keyEquivalent: "q")
+            let quit = NSMenuItem(title: "Invest Stats 종료", action: #selector(PlaceholderTarget.quit), keyEquivalent: "q")
             quit.target = PlaceholderTarget.shared
             menu.addItem(quit)
             item.menu = menu

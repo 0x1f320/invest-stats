@@ -25,13 +25,13 @@ enum UpdateError: LocalizedError {
         case .download(let status):
             return "업데이트를 내려받지 못했습니다 (HTTP \(status))."
         case .badArchive:
-            return "내려받은 파일에서 TossBar.app 을 찾지 못했습니다."
+            return "내려받은 파일에서 앱을 찾지 못했습니다."
         case .signature(let status):
             return "내려받은 앱의 서명이 현재 앱과 일치하지 않아 설치하지 않았습니다 (\(status))."
         case .versionMismatch(let expected, let found):
             return "내려받은 앱의 버전(\(found ?? "없음"))이 릴리스 버전(\(expected))과 다릅니다."
         case .translocated:
-            return "다운로드 폴더 등 격리된 위치에서 실행 중이라 업데이트할 수 없습니다. TossBar.app 을 응용 프로그램 폴더로 옮긴 뒤 다시 실행하세요."
+            return "다운로드 폴더 등 격리된 위치에서 실행 중이라 업데이트할 수 없습니다. Invest Stats.app 을 응용 프로그램 폴더로 옮긴 뒤 다시 실행하세요."
         case .notWritable(let path):
             return "\(path) 에 쓸 권한이 없어 업데이트할 수 없습니다. 릴리스 페이지에서 직접 내려받으세요."
         case .replace(let detail):
@@ -75,8 +75,13 @@ enum UpdateInstaller {
     static func unpack(_ archive: URL, expecting version: SemanticVersion) async throws -> URL {
         let destination = archive.deletingLastPathComponent().appendingPathComponent("unpacked")
         try await run("/usr/bin/ditto", ["-x", "-k", archive.path, destination.path])
-        let app = destination.appendingPathComponent("TossBar.app")
-        guard FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Info.plist").path) else {
+        // The archive holds a single app bundle. Its name is not fixed, so the app can be
+        // renamed without breaking updates; the signature check below decides what it is.
+        let bundles = (try? FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil))?
+            .filter { $0.pathExtension == "app" } ?? []
+        guard bundles.count == 1, let app = bundles.first,
+              FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Info.plist").path)
+        else {
             throw UpdateError.badArchive
         }
         try CodeSignature.checkMatchesRunningApp(app)

@@ -157,7 +157,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "이 항목 삭제", action: #selector(deleteItem), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "TossBar 종료", action: #selector(quit), keyEquivalent: "q").target = self
+        menu.addItem(withTitle: "Invest Stats 종료", action: #selector(quit), keyEquivalent: "q").target = self
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
     }
 
