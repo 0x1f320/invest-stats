@@ -92,7 +92,8 @@ struct AssetPopoverView: View {
                 Spacer()
                 Text("계좌 \(account?.maskedNumber ?? String(seq))").font(.caption).foregroundStyle(.secondary)
             }
-            HStack(spacing: 12) {
+            // One line per market: side by side, two closed markets' next openings don't fit.
+            VStack(alignment: .leading, spacing: 2) {
                 ForEach(MarketRegion.allCases.filter(summary.overview.regions.contains), id: \.self) { region in
                     MarketStatusLine(region: region, calendar: data.calendars[region], showsRegion: true)
                 }
