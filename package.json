@@ -1,0 +1,19 @@
+{
+  "name": "invest-stats-release",
+  "private": true,
+  "description": "Release tooling for TossBar. The app itself is built with SwiftPM.",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "7.0.0",
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/git": "11.0.1",
+    "@semantic-release/github": "12.0.10",
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "semantic-release": "25.0.9"
+  },
+  "overrides": {
+    "@semantic-release/github": "12.0.10"
+  }
+}
