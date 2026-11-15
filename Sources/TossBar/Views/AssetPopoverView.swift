@@ -92,6 +92,11 @@ struct AssetPopoverView: View {
                 Spacer()
                 Text("계좌 \(account?.maskedNumber ?? String(seq))").font(.caption).foregroundStyle(.secondary)
             }
+            HStack(spacing: 12) {
+                ForEach(MarketRegion.allCases.filter(summary.overview.regions.contains), id: \.self) { region in
+                    MarketStatusLine(region: region, calendar: data.calendars[region], showsRegion: true)
+                }
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(config.mode == .total ? (config.afterCost ? "총 손익 · 수수료·세금 제외" : "총 손익 · 원본") : "일간 손익")

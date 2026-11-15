@@ -91,6 +91,8 @@ final class MarketDataService: ObservableObject {
     @Published private(set) var holdings: [Int64: HoldingsOverview] = [:]
     @Published private(set) var accounts: [Account] = []
     @Published private(set) var usdKrw: ExchangeRate?
+    /// Trading hours of the markets the items use. See `MarketCalendar.needsRefresh`.
+    @Published private(set) var calendars: [MarketRegion: MarketCalendar] = [:]
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published private(set) var symbolErrors: [String: String] = [:]
@@ -104,6 +106,7 @@ final class MarketDataService: ObservableObject {
     private var lastFxFetch: Date?
     private var lastAccountsFetch: Date?
     private var lastStockInfoAttempt: [String: Date] = [:]
+    private var lastCalendarAttempt: [MarketRegion: Date] = [:]
     private var chartCache: [String: (fetchedAt: Date, points: [Candle])] = [:]
     private var sparkCache: [String: (fetchedAt: Date, values: [Double])] = [:]
     private var sparkInFlight: [String: Task<[Double]?, Never>] = [:]
@@ -123,6 +126,8 @@ final class MarketDataService: ObservableObject {
         holdings = [:]
         accounts = []
         usdKrw = nil
+        calendars = [:]
+        lastCalendarAttempt = [:]
         lastFxFetch = nil
         lastAccountsFetch = nil
         errorMessage = nil
@@ -160,6 +165,23 @@ final class MarketDataService: ObservableObject {
 
     func priceConversion(symbol: String, display: PriceDisplayCurrency) -> PriceConversion {
         PriceConversion.make(native: currency(for: symbol), display: display, usdKrw: usdKrwRate)
+    }
+
+    /// The market a stock trades on, or nil until its currency is known.
+    func region(forSymbol symbol: String) -> MarketRegion? {
+        let currency = quotes[symbol]?.currency ?? stockInfo[symbol]?.currency ?? daily[symbol]?.latest.currency
+        return currency.flatMap(MarketRegion.init(currency:))
+    }
+
+    /// The markets an item's numbers move with, or nil until that is known.
+    func regions(for item: MenuItemConfig) -> Set<MarketRegion>? {
+        switch item.kind {
+        case .stock(let config):
+            return region(forSymbol: config.symbol).map { [$0] }
+        case .asset(let config):
+            guard let seq = accountSeq(for: config), let overview = holdings[seq] else { return nil }
+            return overview.regions
+        }
     }
 
     // MARK: Polling
@@ -260,6 +282,27 @@ final class MarketDataService: ObservableObject {
                 holdings[seq] = try await client.holdings(account: seq)
             } catch {
                 errors.append(error.localizedDescription)
+            }
+        }
+
+        // 6) Trading hours of the markets the items use. They rarely change, so they are
+        // fetched again only when stale, and a failure is retried after 5 minutes.
+        let needed = items.reduce(into: Set<MarketRegion>()) { $0.formUnion(self.regions(for: $1) ?? []) }
+        for region in MarketRegion.allCases where needed.contains(region) {
+            let now = Date()
+            guard calendars[region]?.needsRefresh(at: now) ?? true,
+                  lastCalendarAttempt[region].map({ now.timeIntervalSince($0) > 300 }) ?? true
+            else { continue }
+            lastCalendarAttempt[region] = now
+            do {
+                switch region {
+                case .kr: calendars[region] = MarketCalendar(kr: try await client.krMarketCalendar(), fetchedAt: now)
+                case .us: calendars[region] = MarketCalendar(us: try await client.usMarketCalendar(), fetchedAt: now)
+                }
+            } catch {
+                // The calendar only adds the market status, so a failure isn't shown as
+                // an error of the item.
+                continue
             }
         }
 

@@ -366,6 +366,16 @@ actor TossAPIClient {
             group: .marketInfo
         )
     }
+
+    /// Domestic trading hours for the previous, current and next business day.
+    func krMarketCalendar() async throws -> MarketCalendarResponse<KrMarketDay> {
+        try await get("/api/v1/market-calendar/KR", group: .marketInfo)
+    }
+
+    /// US trading hours for the previous, current and next business day.
+    func usMarketCalendar() async throws -> MarketCalendarResponse<UsMarketDay> {
+        try await get("/api/v1/market-calendar/US", group: .marketInfo)
+    }
 }
 
 // MARK: - Helpers
