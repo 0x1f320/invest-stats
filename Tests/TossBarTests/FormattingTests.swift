@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import TossBar
@@ -53,5 +54,22 @@ struct TrendTests {
         #expect(Trend(0).menuBarColor == .white)
         #expect(Trend(1).menuBarColor != .white)
         #expect(Trend(-1).menuBarColor != .white)
+    }
+
+    @Test func popoverColorSoftensInDarkMode() {
+        func resolved(_ color: NSColor, _ name: NSAppearance.Name) -> NSColor {
+            var result = color
+            NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
+                result = NSColor(cgColor: color.cgColor)!.usingColorSpace(.sRGB)!
+            }
+            return result
+        }
+        for trend in [Trend.up, .down] {
+            let light = resolved(trend.nsColor, .aqua)
+            let dark = resolved(trend.nsColor, .darkAqua)
+            #expect(light == resolved(trend.menuBarColor, .aqua))
+            #expect(dark.saturationComponent < 0.5)
+            #expect(dark.brightnessComponent == 1)
+        }
     }
 }

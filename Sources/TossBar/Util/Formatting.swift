@@ -115,19 +115,49 @@ enum Trend {
         }
     }
 
+    /// Color for popover text and charts.
     var color: Color { Color(nsColor: nsColor) }
 
+    /// Popover color. In dark mode it switches to a soft tint close to white, because the
+    /// saturated system colors are hard to read on the dark popover background.
     var nsColor: NSColor {
-        switch self {
-        case .up: return Palette.koreanConvention ? .systemRed : .systemGreen
-        case .down: return Palette.koreanConvention ? .systemBlue : .systemRed
-        case .flat: return .secondaryLabelColor
+        guard self != .flat else { return .secondaryLabelColor }
+        let system = systemColor
+        let soft = softColor
+        return NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? soft : system
         }
     }
 
     /// Color for menu bar text. Zero stays white like the rest of the text.
     var menuBarColor: NSColor {
-        self == .flat ? .white : nsColor
+        self == .flat ? .white : systemColor
+    }
+
+    private var tone: Palette.Tone? {
+        switch self {
+        case .up: return Palette.koreanConvention ? .red : .green
+        case .down: return Palette.koreanConvention ? .blue : .red
+        case .flat: return nil
+        }
+    }
+
+    private var systemColor: NSColor {
+        switch tone {
+        case .red: return .systemRed
+        case .green: return .systemGreen
+        case .blue: return .systemBlue
+        case nil: return .secondaryLabelColor
+        }
+    }
+
+    private var softColor: NSColor {
+        switch tone {
+        case .red: return NSColor(srgbRed: 1.00, green: 0.64, blue: 0.64, alpha: 1)
+        case .green: return NSColor(srgbRed: 0.58, green: 0.89, blue: 0.66, alpha: 1)
+        case .blue: return NSColor(srgbRed: 0.62, green: 0.78, blue: 1.00, alpha: 1)
+        case nil: return .secondaryLabelColor
+        }
     }
 }
 
@@ -136,4 +166,6 @@ enum Trend {
 enum Palette {
     /// true: up is red and down is blue (Korean convention). false: up green, down red.
     nonisolated(unsafe) static var koreanConvention = true
+
+    enum Tone { case red, green, blue }
 }
