@@ -27,6 +27,8 @@ git config user.email "272846942+0x1f320@users.noreply.github.com"
 
 Push, open PRs and merge as 0x1f320, with a token from that account. Squash and merge commits made on GitHub use the account's default commit email; that is expected.
 
+The one exception is the release commit that updates `CHANGELOG.md`: the release workflow makes it as the release GitHub App's bot (see [Releases](#releases)).
+
 ## Branches
 
 - **`dev`** is the default branch.
@@ -35,7 +37,7 @@ Push, open PRs and merge as 0x1f320, with a token from that account. Squash and 
 - **`main`** receives `dev` only through a pull request from `dev`.
   - The `main` ruleset requires a PR and allows only **create a merge commit**.
   - Before the first such PR, `main` holds only `chore: initial commit`.
-- **Both branches** are protected from deletion and force pushes. No account bypasses the rulesets, so never push to `dev` or `main` directly.
+- **Both branches** are protected from deletion and force pushes. Only the release GitHub App bypasses the rulesets, to commit `CHANGELOG.md`; never push to `dev` or `main` directly.
 - **Feature branches** are named `<type>/<short-topic>`, for example `feat/asset-popover` or `ci/scaffold`.
 - **Detached worktrees:** when a worktree starts on a detached commit, create a branch named `worktree-<unix timestamp>` right away.
 
@@ -91,11 +93,15 @@ git push --force-with-lease origin <branch>
 - **Versions come from commits:** `feat` bumps the minor version, `fix` and `perf` the patch, and a breaking change the major. Other types don't release. This is why PR titles must follow Conventional Commits.
 - **`dev` publishes prereleases** such as `v1.2.0-dev.1`, marked as pre-release on GitHub.
 - **`main` publishes releases** such as `v1.2.0`.
-- **Nothing is committed back:** the version lives only in the tag. `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, `CFBundleVersion` gets the workflow run number, and `TossBarReleaseVersion` gets the full version (`1.2.0-dev.3`) for the in-app updater.
+- **Only the changelog is committed back:** `@semantic-release/changelog` prepends the release notes to `CHANGELOG.md`, and `@semantic-release/git` commits it to the released branch as `chore(release): <version> [skip ci]`. `[skip ci]` keeps that push from starting another run. Don't edit `CHANGELOG.md` by hand.
+- **The version lives only in the tag.** `scripts/release.sh` injects it into the bundle at build time: `CFBundleShortVersionString` gets `x.y.z` without the prerelease suffix, `CFBundleVersion` gets the workflow run number, and `TossBarReleaseVersion` gets the full version (`1.2.0-dev.3`) for the in-app updater.
 - **Signing and notarization:** the bundle is signed with the Developer ID Application certificate and the hardened runtime, notarized with `notarytool`, stapled, and uploaded as `TossBar-<version>.zip`. Local builds stay ad-hoc signed.
 - **Provisioning profile:** release builds embed the "TossBar Developer ID" profile for App ID `dev.tossbar.TossBar` and are signed with `Resources/TossBar.entitlements`, which grants the keychain access group for the iCloud Keychain. `scripts/release.sh` fails if the signed app lacks that entitlement. The profile expires with the Developer ID certificate; regenerate it in the developer portal whenever the certificate is renewed.
-- **Back-merge:** a release tag on `main` sits on a merge commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
-- **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_PROVISION_PROFILE_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8_BASE64`. A missing secret fails the release before any tag is created.
+- **Back-merge:** a release tag on `main` sits on a commit that `dev` doesn't contain, so semantic-release on `dev` wouldn't see it. After each release, the workflow opens a PR from `main` to `dev` and merges it with a merge commit.
+- **Release GitHub App:** "TossBar Release", owned by 0x1f320, with only Contents read and write, installed only on this repository, and the only bypass actor on the `dev` and `main` rulesets.
+  - The workflow mints a one-hour installation token with `actions/create-github-app-token`. semantic-release uses it to push the changelog commit and tags and to publish the GitHub Release; `GITHUB_TOKEN` still opens and merges the back-merge PR.
+  - The changelog commit is authored by `<app-slug>[bot]` with its noreply address.
+- **Secrets:** `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_PROVISION_PROFILE_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` and `RELEASE_APP_PRIVATE_KEY`, plus the repository variable `RELEASE_APP_ID`. A missing secret fails the release before any tag is created.
   - The `.p12` must use legacy encryption (`openssl pkcs12 -export -legacy`), because `security import` rejects OpenSSL 3's default algorithms.
   - The App Store Connect API key needs only the Developer role. That role can download profiles but not create App IDs or profiles; do that in the developer portal.
 - **Repository setting:** "Allow GitHub Actions to create and approve pull requests" must stay on for the back-merge.
