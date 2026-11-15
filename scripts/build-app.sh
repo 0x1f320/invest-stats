@@ -10,12 +10,19 @@
 #                          identity signs with the hardened runtime and a secure
 #                          timestamp, which notarization requires.
 #   TOSSBAR_KEYCHAIN       Keychain that holds the signing identity.
+#   TOSSBAR_PROVISION_PROFILE
+#                          Developer ID provisioning profile for dev.tossbar.TossBar. With a
+#                          real identity, it is embedded and the app is signed with
+#                          Resources/TossBar.entitlements, which grants the keychain access
+#                          group for the iCloud Keychain. Ignored for ad-hoc builds, which
+#                          cannot carry that entitlement.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="${1:-release}"
 APP="$ROOT/build/TossBar.app"
 IDENTITY="${TOSSBAR_SIGN_IDENTITY:--}"
+PROFILE="${TOSSBAR_PROVISION_PROFILE:-}"
 
 cd "$ROOT"
 swift build -c "$CONFIG"
@@ -36,14 +43,21 @@ fi
 
 if [[ "$IDENTITY" == "-" ]]; then
   # Ad-hoc signature. Required for registering as a login item.
+  if [[ -n "$PROFILE" ]]; then
+    echo "Ignoring TOSSBAR_PROVISION_PROFILE: ad-hoc builds cannot use it." >&2
+  fi
   codesign --force --deep --sign - "$APP" >/dev/null
 else
-  KEYCHAIN_ARGS=()
+  SIGN_ARGS=(--force --options runtime --timestamp --sign "$IDENTITY")
   if [[ -n "${TOSSBAR_KEYCHAIN:-}" ]]; then
-    KEYCHAIN_ARGS=(--keychain "$TOSSBAR_KEYCHAIN")
+    SIGN_ARGS+=(--keychain "$TOSSBAR_KEYCHAIN")
   fi
-  codesign --force --options runtime --timestamp \
-    --sign "$IDENTITY" ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} "$APP"
+  if [[ -n "$PROFILE" ]]; then
+    [[ -f "$PROFILE" ]] || { echo "TOSSBAR_PROVISION_PROFILE does not exist" >&2; exit 1; }
+    cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+    SIGN_ARGS+=(--entitlements "$ROOT/Resources/TossBar.entitlements")
+  fi
+  codesign "${SIGN_ARGS[@]}" "$APP"
   codesign --verify --strict --verbose=2 "$APP"
 fi
 

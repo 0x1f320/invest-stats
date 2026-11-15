@@ -10,6 +10,8 @@
 # Environment (set by .github/workflows/release.yml):
 #   TOSSBAR_SIGN_IDENTITY  Developer ID Application identity.
 #   TOSSBAR_KEYCHAIN       Keychain that holds the identity.
+#   TOSSBAR_PROVISION_PROFILE
+#                          Developer ID provisioning profile; grants the iCloud Keychain access group.
 #   ASC_KEY_PATH           App Store Connect API key (.p8) used by notarytool.
 #   ASC_KEY_ID             Its key ID.
 #   ASC_ISSUER_ID          Its issuer ID.
@@ -32,8 +34,9 @@ require_env() {
 }
 
 verify() {
-  require_env TOSSBAR_SIGN_IDENTITY ASC_KEY_PATH ASC_KEY_ID ASC_ISSUER_ID
+  require_env TOSSBAR_SIGN_IDENTITY TOSSBAR_PROVISION_PROFILE ASC_KEY_PATH ASC_KEY_ID ASC_ISSUER_ID
   [[ -f "$ASC_KEY_PATH" ]] || { echo "ASC_KEY_PATH does not exist" >&2; exit 1; }
+  [[ -s "$TOSSBAR_PROVISION_PROFILE" ]] || { echo "TOSSBAR_PROVISION_PROFILE is missing or empty" >&2; exit 1; }
 }
 
 package() {
@@ -45,6 +48,13 @@ package() {
   TOSSBAR_VERSION="${version%%-*}" \
   TOSSBAR_BUILD_NUMBER="${GITHUB_RUN_NUMBER:-1}" \
     "$ROOT/scripts/build-app.sh" release
+
+  # Without the keychain access group, the iCloud Keychain option would silently disappear.
+  if ! codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q keychain-access-groups; then
+    echo "The signed app is missing the keychain-access-groups entitlement." >&2
+    exit 1
+  fi
+  smoke_test
 
   rm -rf "$OUT"
   mkdir -p "$OUT"
@@ -78,6 +88,21 @@ package() {
 
   ditto -c -k --keepParent "$APP" "$OUT/TossBar-$version.zip"
   echo "Packaged $OUT/TossBar-$version.zip"
+}
+
+# macOS kills an app at launch when its restricted entitlements don't match the embedded
+# profile, so launch it once and make sure it is still running a few seconds later.
+smoke_test() {
+  "$APP/Contents/MacOS/TossBar" >/dev/null 2>&1 &
+  local pid=$!
+  sleep 5
+  if ! kill -0 "$pid" 2>/dev/null; then
+    wait "$pid" || true
+    echo "The signed app exited right after launch; check the entitlements and the profile." >&2
+    exit 1
+  fi
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
 }
 
 published() {
