@@ -112,6 +112,7 @@ final class MarketDataService: ObservableObject {
     private var lastStockInfoAttempt: [String: Date] = [:]
     private var lastCalendarAttempt: [MarketRegion: Date] = [:]
     private var chartCache: [String: (fetchedAt: Date, points: [Candle])] = [:]
+    private var indicatorChartCache: [String: (fetchedAt: Date, candles: [MarketIndicatorCandle])] = [:]
     private var sparkCache: [String: (fetchedAt: Date, values: [Double])] = [:]
     private var sparkInFlight: [String: Task<[Double]?, Never>] = [:]
 
@@ -140,6 +141,7 @@ final class MarketDataService: ObservableObject {
         errorMessage = nil
         symbolErrors = [:]
         chartCache = [:]
+        indicatorChartCache = [:]
         sparkCache = [:]
         refreshSoon()
     }
@@ -448,6 +450,41 @@ final class MarketDataService: ObservableObject {
 
         let ascending = Array(collected.reversed())
         chartCache[key] = (Date(), ascending)
+        return ascending
+    }
+
+    /// An indicator's candles for the chart, oldest first. 1D pages through minute candles
+    /// until it reaches the session before the latest one; it is for indices only, since
+    /// bonds have daily candles only.
+    func indicatorChartCandles(_ indicator: MarketIndicator, range: ChartRange) async throws -> [MarketIndicatorCandle] {
+        let key = "\(indicator.symbol)|\(range.rawValue)"
+        if let cached = indicatorChartCache[key], Date().timeIntervalSince(cached.fetchedAt) < range.cacheTTL {
+            return cached.candles
+        }
+
+        var collected: [MarketIndicatorCandle] = []
+        var seen = Set<Date>()
+        var before: String?
+        var remaining = range.candleCount
+        while remaining > 0 {
+            let page = try await client.indicatorCandles(
+                symbol: indicator.symbol,
+                interval: range.interval,
+                count: min(remaining, 200),
+                before: before
+            )
+            for candle in page.candles where seen.insert(candle.timestamp).inserted {
+                collected.append(candle)
+            }
+            remaining = range.candleCount - collected.count
+            guard let next = page.nextBefore, !page.candles.isEmpty else { break }
+            before = next
+            if range == .day, IndicatorChart.sessionCandles(collected).count < collected.count { break }
+        }
+
+        let candles = range == .day ? IndicatorChart.sessionCandles(collected) : collected
+        let ascending = Array(candles.reversed())
+        indicatorChartCache[key] = (Date(), ascending)
         return ascending
     }
 
