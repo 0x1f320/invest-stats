@@ -161,8 +161,11 @@ final class ItemStore: ObservableObject {
         didSet { persist() }
     }
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.defaultsKey),
            let decoded = try? JSONDecoder().decode([MenuItemConfig].self, from: data) {
             items = decoded
         } else {
@@ -192,6 +195,50 @@ final class ItemStore: ObservableObject {
         items.removeAll { $0.id == id }
     }
 
+    func stockConfig(_ id: UUID) -> StockItemConfig? {
+        if case .stock(let config)? = item(id)?.kind { return config }
+        return nil
+    }
+
+    func assetConfig(_ id: UUID) -> AssetItemConfig? {
+        if case .asset(let config)? = item(id)?.kind { return config }
+        return nil
+    }
+
+    /// Changes a stock item's config in place, as the item settings window does on every
+    /// edit. Does nothing for a missing or non-stock item, or when nothing changes.
+    func updateStock(_ id: UUID, _ change: (inout StockItemConfig) -> Void) {
+        guard var config = stockConfig(id) else { return }
+        change(&config)
+        replaceKind(of: id, with: .stock(config))
+    }
+
+    /// Changes an asset item's config in place. See `updateStock`.
+    func updateAsset(_ id: UUID, _ change: (inout AssetItemConfig) -> Void) {
+        guard var config = assetConfig(id) else { return }
+        change(&config)
+        replaceKind(of: id, with: .asset(config))
+    }
+
+    /// Points an item at another connection. An asset item's account belongs to its old
+    /// connection, so the item goes back to the new connection's first account.
+    func updateConnection(_ id: UUID, to connectionID: UUID?) {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              items[index].connectionID != connectionID else { return }
+        var item = items[index]
+        item.connectionID = connectionID
+        if case .asset(var config) = item.kind {
+            config.accountSeq = nil
+            item.kind = .asset(config)
+        }
+        items[index] = item
+    }
+
+    private func replaceKind(of id: UUID, with kind: ItemKind) {
+        guard let index = items.firstIndex(where: { $0.id == id }), items[index].kind != kind else { return }
+        items[index].kind = kind
+    }
+
     /// Points items that don't name a connection at `connectionID`. Used once, when the
     /// keys saved by an earlier version become a connection.
     func assignConnection(_ connectionID: UUID) {
@@ -205,7 +252,7 @@ final class ItemStore: ObservableObject {
 
     private func persist() {
         if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+            defaults.set(data, forKey: Self.defaultsKey)
         }
     }
 }

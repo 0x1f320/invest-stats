@@ -8,6 +8,7 @@ final class StatusBarManager {
     private var controllers: [UUID: StatusItemController] = [:]
     private var placeholder: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
+    private var pendingRefresh: Task<Void, Never>?
 
     init(env: AppEnvironment) {
         self.env = env
@@ -109,7 +110,18 @@ final class StatusBarManager {
         }
         updatePlaceholder(isEmpty: items.isEmpty)
         scheduleBlockedCheck()
-        if !items.isEmpty { env.data.refreshSoon() }
+        if !items.isEmpty { scheduleRefresh() }
+    }
+
+    /// Refreshes shortly after the items stop changing. The item settings window saves every
+    /// keystroke and toggle, and each change shouldn't cost a round of API requests.
+    private func scheduleRefresh() {
+        pendingRefresh?.cancel()
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.env.data.refreshSoon()
+        }
     }
 
     private func renderAll() {

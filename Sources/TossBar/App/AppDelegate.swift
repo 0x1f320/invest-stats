@@ -5,13 +5,16 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let env = AppEnvironment()
     private var statusBar: StatusBarManager?
+    private var editors: ItemEditorWindows?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var updateWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarManager(env: env)
+        editors = ItemEditorWindows(env: env)
         env.openSettings = { [weak self] in self?.showSettings() }
+        env.openEditor = { [weak self] in self?.editors?.open($0) }
         env.updater.presentOffer = { [weak self] in self?.showUpdate() }
         env.data.start()
         env.updater.start()
@@ -56,7 +59,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         if settingsWindow == nil {
-            settingsWindow = makeWindow(title: "Invest Stats 설정", rootView: SettingsView(env: env))
+            let defaults = UserDefaults.standard
+            let tabs = ToolbarTabController(
+                tabs: SettingsTabs.make(env: env),
+                selected: SettingsTabs.savedSelection
+            )
+            tabs.onSelect = { defaults.set($0, forKey: SettingsTabs.selectionKey) }
+            let window = tabs.makeWindow()
+            window.delegate = self
+            window.center()
+            settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
