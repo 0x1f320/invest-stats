@@ -126,6 +126,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Fixed width that only grows, padded by text width + 4 pt.
   - The title is reassigned only when it changes.
 - **Menu bar text is white by default.** An asset item can opt into trend colors (`colorByTrend`), which color only its profit and rate by their sign, following the app's color convention. Labels, placeholders and stock items stay white.
+  - The general setting `dimClosedMarkets`, off by default, halves the opacity of an item's whole title, trend colors included, while every market the item follows is closed. Anything unknown counts as open, so an item is never dimmed on a guess.
 - **Asset title format:** `{profit}₩ ({rate}%)`, for example `+1,019,000₩ (+11.79%)`, unless the item sets a format of its own.
 - **Custom formats are printf style.** An item's `format` uses `%` and a letter per value (`TitleFormat`), `%%` for a literal `%`, and nil or blank for the default text. Saved formats rely on the letters, so never change what an existing letter means.
 - **Connections hold the keys.** A connection is a provider plus its keys, and each item names the connection it reads from (`connectionID`; nil, in items saved before connections, means the first connection).
@@ -142,6 +143,8 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Only one token per client is valid, so cache it per connection. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
   - Space requests per rate limit group, per connection.
   - Batch price requests across all items of a connection.
+  - Market calendars (`MarketCalendar`) are cached per connection and market, and fetched again only every 6 hours, once the next business day starts, or 5 minutes after a failure.
+  - While every market a connection's items follow is closed, the polling loop refreshes it every 5 minutes (`PollingPolicy`). Anything unknown counts as open, so a missing calendar never slows polling.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.
 - **Updates come only from this repository's GitHub Releases.**
   - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.

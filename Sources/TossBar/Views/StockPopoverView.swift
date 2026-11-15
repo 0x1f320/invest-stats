@@ -105,6 +105,9 @@ struct StockPopoverView: View {
                     .help("이 항목의 가격 표시 통화")
                 }
             }
+            if let region = data.region(forSymbol: config.symbol) {
+                MarketStatusLine(region: region, calendar: data.calendars[region])
+            }
             if let selected = selectedPoint {
                 // Hovering the chart: show the value at that point (already converted).
                 Text(Fmt.priceWithUnit(Decimal(selected.value), currency))

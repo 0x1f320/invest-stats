@@ -1,6 +1,7 @@
 import SwiftUI
 
-// Add dialogs and item settings panes for stock and asset items.
+// Add dialogs and item settings panes for stock and asset items. Indicator items have theirs
+// in IndicatorEditors.swift.
 //
 // Adding asks only for what an item can't exist without (a stock, an account) and then opens
 // the item's settings window. That window follows the macOS settings window style: toolbar
@@ -26,7 +27,7 @@ private struct ErrorText: View {
     }
 }
 
-private struct CaptionText: View {
+struct CaptionText: View {
     let text: String
 
     init(_ text: String) { self.text = text }
@@ -40,7 +41,7 @@ private struct CaptionText: View {
 // MARK: - Stock lookup
 
 @MainActor
-private enum StockLookup {
+enum StockLookup {
     static func name(of symbol: String, universe: StockUniverse, service: MarketDataService?) -> String? {
         universe.entries.first { $0.symbol == symbol }?.name ?? service?.stockInfo[symbol]?.name
     }
@@ -334,7 +335,7 @@ extension ItemStore {
 /// The connection picker of an item settings pane. It shows the connection the item resolves
 /// to, so an item saved before connections shows the first one, and an item whose connection
 /// is gone asks for one.
-private struct ItemConnectionPicker: View {
+struct ItemConnectionPicker: View {
     let env: AppEnvironment
     let id: UUID
     @ObservedObject var store: ItemStore
@@ -438,6 +439,8 @@ struct StockSymbolPane: View {
                     // Only US stocks have a price currency to choose.
                     if !isUS { $0.displayCurrency = .native }
                 }
+                // A target price belongs to the old stock.
+                store.removePriceAlerts(of: id)
             } catch {
                 self.error = error.localizedDescription
             }
@@ -626,7 +629,7 @@ struct AssetDisplayPane: View {
 
 /// The menu bar format of an item's display pane: the format field, the tokens it can use,
 /// and a preview of the result.
-private struct TitleFormatEditor<Token: TitleToken>: View {
+struct TitleFormatEditor<Token: TitleToken>: View {
     @Binding var format: String
     let defaultFormat: String
     let preview: NSAttributedString

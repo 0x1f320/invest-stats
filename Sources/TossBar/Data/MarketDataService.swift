@@ -91,6 +91,12 @@ final class MarketDataService: ObservableObject {
     @Published private(set) var holdings: [Int64: HoldingsOverview] = [:]
     @Published private(set) var accounts: [Account] = []
     @Published private(set) var usdKrw: ExchangeRate?
+    /// Trading hours of the markets the items use. See `MarketCalendar.needsRefresh`.
+    @Published private(set) var calendars: [MarketRegion: MarketCalendar] = [:]
+    /// Market indicator values and their latest daily candles (newest first), by symbol.
+    @Published private(set) var indicatorQuotes: [String: MarketIndicatorQuote] = [:]
+    @Published private(set) var indicatorDaily: [String: (fetchedAt: Date, candles: [MarketIndicatorCandle])] = [:]
+    @Published private(set) var indicatorErrors: [String: String] = [:]
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
     @Published private(set) var symbolErrors: [String: String] = [:]
@@ -104,7 +110,9 @@ final class MarketDataService: ObservableObject {
     private var lastFxFetch: Date?
     private var lastAccountsFetch: Date?
     private var lastStockInfoAttempt: [String: Date] = [:]
+    private var lastCalendarAttempt: [MarketRegion: Date] = [:]
     private var chartCache: [String: (fetchedAt: Date, points: [Candle])] = [:]
+    private var indicatorChartCache: [String: (fetchedAt: Date, candles: [MarketIndicatorCandle])] = [:]
     private var sparkCache: [String: (fetchedAt: Date, values: [Double])] = [:]
     private var sparkInFlight: [String: Task<[Double]?, Never>] = [:]
 
@@ -123,11 +131,17 @@ final class MarketDataService: ObservableObject {
         holdings = [:]
         accounts = []
         usdKrw = nil
+        calendars = [:]
+        lastCalendarAttempt = [:]
+        indicatorQuotes = [:]
+        indicatorDaily = [:]
+        indicatorErrors = [:]
         lastFxFetch = nil
         lastAccountsFetch = nil
         errorMessage = nil
         symbolErrors = [:]
         chartCache = [:]
+        indicatorChartCache = [:]
         sparkCache = [:]
         refreshSoon()
     }
@@ -160,6 +174,51 @@ final class MarketDataService: ObservableObject {
 
     func priceConversion(symbol: String, display: PriceDisplayCurrency) -> PriceConversion {
         PriceConversion.make(native: currency(for: symbol), display: display, usdKrw: usdKrwRate)
+    }
+
+    /// The market a stock trades on, or nil until its currency is known.
+    func region(forSymbol symbol: String) -> MarketRegion? {
+        let currency = quotes[symbol]?.currency ?? stockInfo[symbol]?.currency ?? daily[symbol]?.latest.currency
+        return currency.flatMap(MarketRegion.init(currency:))
+    }
+
+    /// Whether every market this connection's items follow is closed. See `PollingPolicy`.
+    func isIdle(at date: Date) -> Bool {
+        PollingPolicy.isIdle(itemRegions: items().map(regions(for:))) { region in
+            calendars[region]?.status(at: date)
+        }
+    }
+
+    /// Whether every market one item follows is closed, by the same rules: anything
+    /// unknown counts as open.
+    func isClosed(_ item: MenuItemConfig, at date: Date = Date()) -> Bool {
+        PollingPolicy.isIdle(itemRegions: [regions(for: item)]) { region in
+            calendars[region]?.status(at: date)
+        }
+    }
+
+    /// The markets an item's numbers move with, or nil until that is known.
+    func regions(for item: MenuItemConfig) -> Set<MarketRegion>? {
+        switch item.kind {
+        case .stock(let config):
+            return region(forSymbol: config.symbol).map { [$0] }
+        case .asset(let config):
+            guard let seq = accountSeq(for: config), let overview = holdings[seq] else { return nil }
+            return overview.regions
+        case .indicator(let config):
+            switch config.indicator?.category {
+            case .index, .bond:
+                // KOSPI, KOSDAQ and the government bond yields are quoted in KRX hours.
+                return [.kr]
+            case .exchangeRate:
+                // The rate updates every minute and follows no market's hours. nil counts
+                // as open, so the connection is never idle (`PollingPolicy`).
+                return nil
+            case nil:
+                // An unsupported symbol has nothing to refresh.
+                return []
+            }
+        }
     }
 
     // MARK: Polling
@@ -242,8 +301,9 @@ final class MarketDataService: ObservableObject {
             }
         }
 
-        // 4) USD/KRW rate for US holdings and stock items shown in KRW, cached for a minute.
-        if !assetConfigs.isEmpty || items.needsUsdKrwForStocks,
+        // 4) USD/KRW rate for US holdings, stock items shown in KRW and the exchange rate
+        //    indicator, cached for a minute (the API updates it every minute).
+        if !assetConfigs.isEmpty || items.needsUsdKrwForStocks || items.needsUsdKrwForIndicators,
            lastFxFetch.map({ Date().timeIntervalSince($0) > 60 }) ?? true {
             do {
                 usdKrw = try await client.usdKrwRate()
@@ -263,10 +323,79 @@ final class MarketDataService: ObservableObject {
             }
         }
 
+        // 6) Trading hours of the markets the items use. They rarely change, so they are
+        // fetched again only when stale, and a failure is retried after 5 minutes.
+        let needed = items.reduce(into: Set<MarketRegion>()) { $0.formUnion(self.regions(for: $1) ?? []) }
+        for region in MarketRegion.allCases where needed.contains(region) {
+            let now = Date()
+            guard calendars[region]?.needsRefresh(at: now) ?? true,
+                  lastCalendarAttempt[region].map({ now.timeIntervalSince($0) > 300 }) ?? true
+            else { continue }
+            lastCalendarAttempt[region] = now
+            do {
+                switch region {
+                case .kr: calendars[region] = MarketCalendar(kr: try await client.krMarketCalendar(), fetchedAt: now)
+                case .us: calendars[region] = MarketCalendar(us: try await client.usMarketCalendar(), fetchedAt: now)
+                }
+            } catch {
+                // The calendar only adds the market status, so a failure isn't shown as
+                // an error of the item.
+                continue
+            }
+        }
+        // 7) Market indicators: one request for all of them, then their previous close.
+        errors += await refreshIndicators(items.indicatorSymbols)
+
         errorMessage = errors.first
-        if errors.isEmpty || !quotes.isEmpty || !holdings.isEmpty {
+        if errors.isEmpty || !quotes.isEmpty || !holdings.isEmpty || !indicatorQuotes.isEmpty {
             lastUpdated = Date()
         }
+    }
+
+    /// Refreshes the market indicator values and, every 2 minutes, the two latest daily
+    /// candles for the previous close. Returns the errors to show.
+    private func refreshIndicators(_ symbols: [String]) async -> [String] {
+        guard !symbols.isEmpty else { return [] }
+        var errors: [String] = []
+        do {
+            for quote in try await client.indicatorPrices(symbols) {
+                indicatorQuotes[quote.symbol] = quote
+            }
+            symbols.forEach { indicatorErrors[$0] = nil }
+        } catch {
+            // A failed batch doesn't say which symbol is bad, so retry one by one.
+            for symbol in symbols {
+                do {
+                    if let quote = try await client.indicatorPrices([symbol]).first {
+                        indicatorQuotes[symbol] = quote
+                        indicatorErrors[symbol] = nil
+                    }
+                } catch {
+                    indicatorErrors[symbol] = error.localizedDescription
+                }
+            }
+            errors.append(error.localizedDescription)
+        }
+
+        for symbol in symbols {
+            if let daily = indicatorDaily[symbol], Date().timeIntervalSince(daily.fetchedAt) < 120 { continue }
+            do {
+                let page = try await client.indicatorCandles(symbol: symbol, interval: .day, count: 2)
+                indicatorDaily[symbol] = (Date(), page.candles)
+            } catch {
+                indicatorErrors[symbol] = indicatorErrors[symbol] ?? error.localizedDescription
+            }
+        }
+        return errors
+    }
+
+    /// What an indicator item shows, or nil until its value loads.
+    func indicatorReading(_ indicator: MarketIndicator) -> IndicatorReading? {
+        if indicator.category == .exchangeRate {
+            return usdKrw.map(IndicatorReading.init(exchangeRate:))
+        }
+        guard let quote = indicatorQuotes[indicator.symbol] else { return nil }
+        return IndicatorReading(indicator: indicator, quote: quote, dailyCandles: indicatorDaily[indicator.symbol]?.candles ?? [])
     }
 
     /// For the account picker in the asset item editor.
@@ -324,6 +453,41 @@ final class MarketDataService: ObservableObject {
         return ascending
     }
 
+    /// An indicator's candles for the chart, oldest first. 1D pages through minute candles
+    /// until it reaches the session before the latest one; it is for indices only, since
+    /// bonds have daily candles only.
+    func indicatorChartCandles(_ indicator: MarketIndicator, range: ChartRange) async throws -> [MarketIndicatorCandle] {
+        let key = "\(indicator.symbol)|\(range.rawValue)"
+        if let cached = indicatorChartCache[key], Date().timeIntervalSince(cached.fetchedAt) < range.cacheTTL {
+            return cached.candles
+        }
+
+        var collected: [MarketIndicatorCandle] = []
+        var seen = Set<Date>()
+        var before: String?
+        var remaining = range.candleCount
+        while remaining > 0 {
+            let page = try await client.indicatorCandles(
+                symbol: indicator.symbol,
+                interval: range.interval,
+                count: min(remaining, 200),
+                before: before
+            )
+            for candle in page.candles where seen.insert(candle.timestamp).inserted {
+                collected.append(candle)
+            }
+            remaining = range.candleCount - collected.count
+            guard let next = page.nextBefore, !page.candles.isEmpty else { break }
+            before = next
+            if range == .day, IndicatorChart.sessionCandles(collected).count < collected.count { break }
+        }
+
+        let candles = range == .day ? IndicatorChart.sessionCandles(collected) : collected
+        let ascending = Array(candles.reversed())
+        indicatorChartCache[key] = (Date(), ascending)
+        return ascending
+    }
+
     /// Closing prices of the last 30 trading days, for the mini charts in the holdings list.
     /// Cached for 10 minutes; concurrent callers share one request.
     func sparkline(symbol: String) async -> [Double]? {
@@ -367,6 +531,10 @@ final class MarketDataHub: ObservableObject {
     private var forwarders: [UUID: AnyCancellable] = [:]
     private var cancellables = Set<AnyCancellable>()
     private var loopTask: Task<Void, Never>?
+    /// When each connection's last refresh started.
+    private var lastRefresh: [UUID: Date] = [:]
+    /// Whether each connection's markets were all closed at the last tick.
+    private var lastIdle: [UUID: Bool] = [:]
 
     init(connections: ConnectionStore, store: ItemStore, settings: AppSettings) {
         self.connections = connections
@@ -393,26 +561,55 @@ final class MarketDataHub: ObservableObject {
 
     // MARK: Polling
 
+    /// Ticks every refresh interval. A connection whose markets are all closed is
+    /// refreshed less often (`PollingPolicy`), and at full speed again on the first tick
+    /// after a market opens.
     func start() {
         loopTask?.cancel()
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshAll()
-                let interval = self?.settings.refreshInterval ?? 10
-                try? await Task.sleep(nanoseconds: UInt64(max(interval, 3) * 1_000_000_000))
+                await self?.refreshDue()
+                let interval = self?.interval ?? 10
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             }
         }
     }
 
+    private var interval: TimeInterval { max(settings.refreshInterval, 3) }
+
+    /// Refreshes every connection now, whatever its markets. For a manual refresh, an
+    /// opened popover or changed items.
     func refreshSoon() {
         Task { await refreshAll() }
     }
 
     /// Refreshes every connection that has items, side by side.
     func refreshAll() async {
-        let active = services.values.filter { !items(for: $0.connectionID).isEmpty }
+        await refresh(services.values.filter { !items(for: $0.connectionID).isEmpty })
+    }
+
+    /// Refreshes the connections that are due, as the polling loop does.
+    private func refreshDue() async {
+        let now = Date()
+        var marketsChanged = false
+        let due = services.values.filter { service in
+            let id = service.connectionID
+            guard !items(for: id).isEmpty else { return false }
+            let idle = service.isIdle(at: now)
+            if lastIdle.updateValue(idle, forKey: id) != idle { marketsChanged = true }
+            return PollingPolicy.isDue(lastRefresh: lastRefresh[id], now: now, interval: interval, idle: idle)
+        }
+        // A market that just closed doesn't call for a refresh, so redraw the menu bar,
+        // which dims closed markets when asked to, without one.
+        if marketsChanged { objectWillChange.send() }
+        await refresh(due)
+    }
+
+    private func refresh(_ services: [MarketDataService]) async {
+        let now = Date()
+        for service in services { lastRefresh[service.connectionID] = now }
         await withTaskGroup(of: Void.self) { group in
-            for service in active {
+            for service in services {
                 group.addTask { @MainActor in await service.refresh() }
             }
         }
@@ -425,6 +622,8 @@ final class MarketDataHub: ObservableObject {
         for id in services.keys where !ids.contains(id) {
             services[id] = nil
             forwarders[id] = nil
+            lastRefresh[id] = nil
+            lastIdle[id] = nil
         }
         for stored in list {
             if let service = services[stored.id] {

@@ -76,7 +76,7 @@ struct ItemsSettingsView: View {
                 if store.items.isEmpty {
                     Text(connections.isEmpty
                          ? "아직 연결이 없습니다.\n먼저 '연결' 탭에서 증권사를 연결하세요."
-                         : "아직 항목이 없습니다.\n아래 + 버튼으로 '주가' 또는 '자산' 항목을 추가하세요.")
+                         : "아직 항목이 없습니다.\n아래 + 버튼으로 '주가', '자산' 또는 '지표' 항목을 추가하세요.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                 }
@@ -86,6 +86,7 @@ struct ItemsSettingsView: View {
                 Menu {
                     Button("주가 항목 추가…") { env.openEditor(.newStock) }
                     Button("자산 항목 추가…") { env.openEditor(.newAsset) }
+                    Button("지표 항목 추가…") { env.openEditor(.newIndicator) }
                 } label: {
                     Label("추가", systemImage: "plus")
                 }
@@ -129,6 +130,12 @@ struct ItemsSettingsView: View {
                     Text("자산" + (config.label.nilIfBlank.map { " · \($0)" } ?? ""))
                     detail(item, assetDetail(config, service: service))
                 }
+            case .indicator(let config):
+                Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.purple).frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("지표 · \(config.displayName?.nilIfBlank ?? config.indicator?.name ?? config.symbol)")
+                    detail(item, indicatorDetail(config))
+                }
             }
             Spacer()
             Button {
@@ -162,6 +169,16 @@ struct ItemsSettingsView: View {
             Text("⚠︎ 연결 없음 · 편집해서 연결을 지정하세요")
                 .font(.caption).foregroundStyle(.orange)
         }
+    }
+
+    private func indicatorDetail(_ config: IndicatorItemConfig) -> String {
+        guard let indicator = config.indicator else { return "\(config.symbol) · 지원하지 않는 지표" }
+        return [
+            indicator.displaySymbol,
+            indicator.category.title,
+            config.showName ? "이름 표시" : "이름 숨김",
+            indicator.category == .exchangeRate ? nil : (config.showChange ? "등락 표시" : "등락 숨김"),
+        ].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func assetDetail(_ config: AssetItemConfig, service: MarketDataService?) -> String {
@@ -200,6 +217,12 @@ struct GeneralSettingsView: View {
                 Text("상승 초록 · 하락 빨강 (해외식)").tag(false)
             }
 
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("장이 닫힌 항목 흐리게 표시", isOn: $settings.dimClosedMarkets)
+                Text("항목이 따르는 시장이 모두 닫혀 있으면 메뉴바 텍스트를 흐리게 표시합니다. 프리마켓·애프터마켓·데이마켓은 열린 것으로 봅니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Toggle("로그인 시 자동 실행", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, newValue in
                     do {
@@ -215,7 +238,7 @@ struct GeneralSettingsView: View {
             }
 
             Section {
-                Text("데이터 출처: 각 연결의 증권사 Open API (REST). 시세는 갱신 주기마다 연결별로 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다.")
+                Text("데이터 출처: 각 연결의 증권사 Open API (REST). 시세는 갱신 주기마다 연결별로 일괄 조회하며, 그룹별 호출 한도를 넘지 않도록 자동 조절합니다. 항목들이 따르는 시장이 모두 닫혀 있으면 5분마다 조회하고, 장이 열리면 갱신 주기로 돌아갑니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Invest Stats 종료") { env.quit() }
             }

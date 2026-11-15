@@ -1,6 +1,6 @@
 # Invest Stats
 
-**Invest Stats** is a macOS menu bar app that shows live stock prices and your portfolio profit from the [Toss Securities OpenAPI](https://developers.tossinvest.com/docs), in the style of iStat Menus.
+**Invest Stats** is a macOS menu bar app that shows live stock prices, market indicators and your portfolio profit from the [Toss Securities OpenAPI](https://developers.tossinvest.com/docs), in the style of iStat Menus.
 
 The app's UI is in Korean, since it is built for Toss Securities users.
 
@@ -12,6 +12,7 @@ Each stock item is its own menu bar item, for example `삼성전자 72,000 +1.23
 
 - **Popover:** clicking the item opens a price chart (1D / 1M / 3M / 6M / 1Y) with the day's open, high, low and volume.
 - **US stocks:** each item can show its price in dollars or in won, converted at the USD/KRW base rate (매매기준율).
+- **Market status:** the popover shows the stock's market session, such as `정규장 · 15:30까지`, or when it opens next, such as `장 마감 · 다음 개장 11/17 08:00 프리마켓`. US stocks tell the day, pre, regular and after market apart.
 - **Custom format:** see [Menu bar format](#menu-bar-format).
 
 ### Asset items
@@ -21,25 +22,40 @@ An asset item shows the profit on an account's holdings as `{profit}₩ ({rate}%
 - **Profit:** since purchase or since the previous close, either raw or after fees and taxes.
 - **Popover:** clicking the item lists every holding with its price, a 30-day sparkline and its profit. Tapping a holding shows how its market value, purchase amount, profit, costs and weight are calculated.
 - **US holdings:** converted to KRW at the base rate.
+- **Market status:** the popover shows the session of each market the holdings trade on.
 - **Profit colors:** each item can color its profit and rate by their sign, red for a gain and blue for a loss by default. The color convention is set in the general settings.
+- **Custom format:** see [Menu bar format](#menu-bar-format).
+
+### Indicator items
+
+An indicator item shows a market index, a Korean government bond yield or the USD/KRW base rate, for example `코스피 2,812.45 +0.51%`.
+
+- **Indicators:** KOSPI and KOSDAQ, government bond yields (2, 3, 5, 10, 20 and 30 years), and the USD/KRW base rate (매매기준율).
+- **Values as the API reports them:** indices in points, bond yields in percent, and the exchange rate in won per dollar.
+- **Change:** an index shows its change rate since the previous close and a bond yield its change in percentage points (`%p`), both against the previous daily close the API reports. The exchange rate API reports no previous value, so the exchange rate shows only the direction it reports.
+- **Popover:** clicking the item opens a chart (1D / 1M / 3M / 6M / 1Y for indices; bonds have daily candles only, so no 1D) with the day's open, high, low and previous close. The exchange rate API has no candles, so its popover shows the buying rate and its spread over the base rate instead.
 - **Custom format:** see [Menu bar format](#menu-bar-format).
 
 ### Menu bar format
 
 Each item can replace its menu bar text with a format of its own, set in the **표시** (Display) tab of its settings window. Codes such as `%p` stand for the item's values, `%%` is a literal `%`, and any other text is shown as written. Left empty, the item keeps its default text.
 
-| Code | Stock item | Asset item |
-| --- | --- | --- |
-| `%n` | Name (display name or stock name) | |
-| `%c` | Stock code | |
-| `%p` | Price | Profit |
-| `%r` | Change rate since the previous close | Profit rate |
-| `%a` | Change amount since the previous close | |
-| `%l` | | Label |
-| `%v` | | Market value |
-| `%b` | | Purchase amount |
+| Code | Stock item | Asset item | Indicator item |
+| --- | --- | --- | --- |
+| `%n` | Name (display name or stock name) | | Name (display name or indicator name) |
+| `%c` | Stock code | | Indicator code, such as `KOSPI` or `USD/KRW` |
+| `%p` | Price | Profit | Value (index, yield or exchange rate) |
+| `%r` | Change rate since the previous close | Profit rate | Change rate since the previous close (empty for the exchange rate) |
+| `%a` | Change amount since the previous close | | Change since the previous close, in `%p` for yields (empty for the exchange rate) |
+| `%l` | | Label | |
+| `%v` | | Market value | |
+| `%b` | | Purchase amount | |
 
-For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, and `%l %r` shows `💰 +11.79%`.
+For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, `%l %r` shows `💰 +11.79%`, and `%c %p %a` on a bond yield shows `KR_BOND_10Y 3.215% -0.035%p`.
+
+### Closed markets
+
+Turn on **장이 닫힌 항목 흐리게 표시** in the general settings to dim an item's menu bar text while every market it follows is closed: the stock's market for a stock item, the markets of the holdings for an asset item, and the KRX market for an index or bond yield item. The exchange rate follows no market's hours, so it is never dimmed. The pre, after and US day market sessions count as open. It is off by default, so the text stays white.
 
 ### Connections
 
@@ -51,10 +67,10 @@ Each item reads from a connection: a provider (Toss Securities for now) and its 
 
 ### Any number of items
 
-Add as many stock and asset items as you like, and remove them from the settings window, the item's right-click menu, or the `…` menu in its popover.
+Add as many stock, asset and indicator items as you like, and remove them from the settings window, the item's right-click menu, or the `…` menu in its popover.
 
-- **Adding:** a small dialog asks only for what the item needs, a stock or an account, and then opens the item's settings window.
-- **Settings window:** each item has its own window with toolbar tabs, like a macOS settings window: 종목 (Stock) and 표시 (Display) for a stock item, 계좌 (Account), 손익 (Profit) and 표시 (Display) for an asset item. Changes apply as you make them. Open it with 편집 (Edit) in the settings, the item's right-click menu, or the `…` menu in its popover.
+- **Adding:** a small dialog asks only for what the item needs, a stock, an account or an indicator, and then opens the item's settings window.
+- **Settings window:** each item has its own window with toolbar tabs, like a macOS settings window: 종목 (Stock) and 표시 (Display) for a stock item, 계좌 (Account), 손익 (Profit) and 표시 (Display) for an asset item, and 지표 (Indicator) and 표시 (Display) for an indicator item. Changes apply as you make them. Open it with 편집 (Edit) in the settings, the item's right-click menu, or the `…` menu in its popover.
 
 Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager such as [Thaw](https://github.com/stonerl/Thaw) or [Ice](https://github.com/jordanbaird/Ice).
 
@@ -145,7 +161,8 @@ Your public IP changed or isn't registered. Add it in WTS > 설정 > Open API.
 
 Some design choices:
 
-- **Batched prices:** prices for every item of a connection are fetched in one request per refresh, so many items cost the same as one.
+- **Batched prices:** prices for every item of a connection are fetched in one request per refresh, so many items cost the same as one. Indicator values are batched the same way, in their own request.
+- **Idle polling:** while every market a connection's items follow is closed, that connection is refreshed every 5 minutes instead of at the refresh interval, and at full speed again once a market opens. Index and bond yield items follow the KRX market; the exchange rate follows none, so a connection with an exchange rate item keeps polling at the refresh interval.
 - **Stable status items:** each status item has a stable `autosaveName` and is never recreated on edit. This keeps its position with macOS and with menu bar managers.
 - **Raw API figures:** profit figures come straight from the API's own calculations, including the after-cost values. Only the USD to KRW conversion is done locally.
 
