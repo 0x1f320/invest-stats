@@ -81,6 +81,7 @@ git push --force-with-lease origin <branch>
 | `swift scripts/make-icon.swift` | Redraws the app icon and writes `Resources/AppIcon.icns`; commit the result |
 | `scripts/release.sh package <version>` | Builds, signs, notarizes and zips a release; run by semantic-release in CI |
 | `TOSSBAR_DIAG=1 "build/Invest Stats.app/Contents/MacOS/TossBar"` | Prints each menu bar item's state and API errors every 3 s |
+| `TOSSBAR_SUPPORT_DIR=<dir> .build/debug/TossBar` | Runs a debug build against connections in `<dir>` instead of `~/Library/Application Support/TossBar/`, so it never migrates or edits the real ones. Run the bare executable: it has no bundle id, so its settings live in a separate `TossBar` defaults domain |
 
 - **CI:** `.github/workflows/ci.yml` runs on every PR and on pushes to `dev` and `main`. It builds, runs the tests, builds the release bundle, and uploads it as an artifact.
 - **Release tooling:** `package.json` holds only semantic-release and its plugins, pinned to exact versions. The app itself never depends on Node.

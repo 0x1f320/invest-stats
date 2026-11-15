@@ -40,9 +40,16 @@ enum SecretStoreError: LocalizedError {
 /// by the signed keychain access group, not by a per-item ACL. Users opt into it to share
 /// the keys with their other Macs.
 enum SecretStore {
+    /// `~/Library/Application Support/TossBar/`, or `TOSSBAR_SUPPORT_DIR` when set, so a
+    /// development build can run against throwaway connections instead of the real ones.
     static var directory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("TossBar", isDirectory: true)
+        let base: URL
+        if let override = ProcessInfo.processInfo.environment["TOSSBAR_SUPPORT_DIR"], !override.isEmpty {
+            base = URL(fileURLWithPath: override, isDirectory: true)
+        } else {
+            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("TossBar", isDirectory: true)
+        }
         if !FileManager.default.fileExists(atPath: base.path) {
             try? FileManager.default.createDirectory(
                 at: base,
