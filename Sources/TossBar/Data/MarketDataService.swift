@@ -173,6 +173,13 @@ final class MarketDataService: ObservableObject {
         return currency.flatMap(MarketRegion.init(currency:))
     }
 
+    /// Whether every market this connection's items follow is closed. See `PollingPolicy`.
+    func isIdle(at date: Date) -> Bool {
+        PollingPolicy.isIdle(itemRegions: items().map(regions(for:))) { region in
+            calendars[region]?.status(at: date)
+        }
+    }
+
     /// The markets an item's numbers move with, or nil until that is known.
     func regions(for item: MenuItemConfig) -> Set<MarketRegion>? {
         switch item.kind {
@@ -410,6 +417,8 @@ final class MarketDataHub: ObservableObject {
     private var forwarders: [UUID: AnyCancellable] = [:]
     private var cancellables = Set<AnyCancellable>()
     private var loopTask: Task<Void, Never>?
+    /// When each connection's last refresh started.
+    private var lastRefresh: [UUID: Date] = [:]
 
     init(connections: ConnectionStore, store: ItemStore, settings: AppSettings) {
         self.connections = connections
@@ -436,26 +445,52 @@ final class MarketDataHub: ObservableObject {
 
     // MARK: Polling
 
+    /// Ticks every refresh interval. A connection whose markets are all closed is
+    /// refreshed less often (`PollingPolicy`), and at full speed again on the first tick
+    /// after a market opens.
     func start() {
         loopTask?.cancel()
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshAll()
-                let interval = self?.settings.refreshInterval ?? 10
-                try? await Task.sleep(nanoseconds: UInt64(max(interval, 3) * 1_000_000_000))
+                await self?.refreshDue()
+                let interval = self?.interval ?? 10
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
             }
         }
     }
 
+    private var interval: TimeInterval { max(settings.refreshInterval, 3) }
+
+    /// Refreshes every connection now, whatever its markets. For a manual refresh, an
+    /// opened popover or changed items.
     func refreshSoon() {
         Task { await refreshAll() }
     }
 
     /// Refreshes every connection that has items, side by side.
     func refreshAll() async {
-        let active = services.values.filter { !items(for: $0.connectionID).isEmpty }
+        await refresh(services.values.filter { !items(for: $0.connectionID).isEmpty })
+    }
+
+    /// Refreshes the connections that are due, as the polling loop does.
+    private func refreshDue() async {
+        let now = Date()
+        let due = services.values.filter { service in
+            !items(for: service.connectionID).isEmpty && PollingPolicy.isDue(
+                lastRefresh: lastRefresh[service.connectionID],
+                now: now,
+                interval: interval,
+                idle: service.isIdle(at: now)
+            )
+        }
+        await refresh(due)
+    }
+
+    private func refresh(_ services: [MarketDataService]) async {
+        let now = Date()
+        for service in services { lastRefresh[service.connectionID] = now }
         await withTaskGroup(of: Void.self) { group in
-            for service in active {
+            for service in services {
                 group.addTask { @MainActor in await service.refresh() }
             }
         }
@@ -468,6 +503,7 @@ final class MarketDataHub: ObservableObject {
         for id in services.keys where !ids.contains(id) {
             services[id] = nil
             forwarders[id] = nil
+            lastRefresh[id] = nil
         }
         for stored in list {
             if let service = services[stored.id] {

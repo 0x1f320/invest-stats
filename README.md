@@ -148,6 +148,7 @@ Your public IP changed or isn't registered. Add it in WTS > 설정 > Open API.
 Some design choices:
 
 - **Batched prices:** prices for every item of a connection are fetched in one request per refresh, so many items cost the same as one.
+- **Idle polling:** while every market a connection's items follow is closed, that connection is refreshed every 5 minutes instead of at the refresh interval, and at full speed again once a market opens.
 - **Stable status items:** each status item has a stable `autosaveName` and is never recreated on edit. This keeps its position with macOS and with menu bar managers.
 - **Raw API figures:** profit figures come straight from the API's own calculations, including the after-cost values. Only the USD to KRW conversion is done locally.
 
