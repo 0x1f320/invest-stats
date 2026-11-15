@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.2...v1.1.0-dev.3) (2026-11-15)
+
+### Features
+
+* **indicator:** add market index, bond yield and exchange rate items ([#35](https://github.com/0x1f320/invest-stats/issues/35)) ([85617d7](https://github.com/0x1f320/invest-stats/commit/85617d7e45b8e2b739867ec44a24691097c74256)), closes [#29](https://github.com/0x1f320/invest-stats/issues/29) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#31](https://github.com/0x1f320/invest-stats/issues/31) [#34](https://github.com/0x1f320/invest-stats/issues/34) [#29](https://github.com/0x1f320/invest-stats/issues/29) [#30](https://github.com/0x1f320/invest-stats/issues/30) [#31](https://github.com/0x1f320/invest-stats/issues/31)
+
 ## [1.1.0-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.1.0-dev.1...v1.1.0-dev.2) (2026-11-15)
 
 ### Features
