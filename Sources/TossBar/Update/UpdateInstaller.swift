@@ -2,8 +2,11 @@ import AppKit
 import Foundation
 import Security
 
-enum UpdateError: LocalizedError {
+enum UpdateError: LocalizedError, Equatable {
     case github(status: Int)
+    /// GitHub refused the request for sending too many; it may be retried after the date.
+    case rateLimited(until: Date?)
+    case feed
     case transport(String)
     case download(status: Int)
     case badArchive
@@ -16,10 +19,15 @@ enum UpdateError: LocalizedError {
     /// Shown in the UI, so the messages are Korean.
     var errorDescription: String? {
         switch self {
-        case .github(403), .github(429):
-            return "GitHub 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
         case .github(let status):
             return "GitHub Releases 를 불러오지 못했습니다 (HTTP \(status))."
+        case .rateLimited(let until?):
+            let time = until.formatted(date: .omitted, time: .shortened)
+            return "GitHub 요청 한도를 초과했습니다. \(time) 이후 다시 시도하세요."
+        case .rateLimited(nil):
+            return "GitHub 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+        case .feed:
+            return "GitHub Releases 목록을 읽지 못했습니다."
         case .transport(let detail):
             return "네트워크 오류: \(detail)"
         case .download(let status):
@@ -37,6 +45,24 @@ enum UpdateError: LocalizedError {
         case .replace(let detail):
             return "앱을 교체하지 못했습니다: \(detail)"
         }
+    }
+}
+
+extension UpdateError {
+    /// The error for a GitHub response that isn't a success. Only a response that says it was
+    /// rate limited becomes `rateLimited`: a 429, or a 403 whose `X-RateLimit-Remaining` is 0.
+    /// The retry date comes from `Retry-After` (seconds) or `X-RateLimit-Reset` (epoch seconds).
+    static func forResponse(_ response: HTTPURLResponse, now: Date = Date()) -> UpdateError {
+        let status = response.statusCode
+        let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
+        guard status == 429 || (status == 403 && remaining == "0") else { return .github(status: status) }
+        if let seconds = response.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init), seconds >= 0 {
+            return .rateLimited(until: now.addingTimeInterval(seconds))
+        }
+        if let reset = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init) {
+            return .rateLimited(until: Date(timeIntervalSince1970: reset))
+        }
+        return .rateLimited(until: nil)
     }
 }
 
@@ -63,8 +89,12 @@ enum UpdateInstaller {
         } catch {
             throw UpdateError.transport(error.localizedDescription)
         }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw UpdateError.download(status: status) }
+        guard let http = response as? HTTPURLResponse else { throw UpdateError.download(status: 0) }
+        guard http.statusCode == 200 else {
+            let error = UpdateError.forResponse(http)
+            if case .rateLimited = error { throw error }
+            throw UpdateError.download(status: http.statusCode)
+        }
         let archive = workDir.appendingPathComponent(offer.archive.name)
         try FileManager.default.moveItem(at: temporary, to: archive)
         return archive

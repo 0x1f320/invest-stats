@@ -109,10 +109,11 @@ final class Updater: ObservableObject {
     func check(userInitiated: Bool) async {
         guard let currentVersion, checkState != .checking, !installState.isBusy else { return }
         checkState = .checking
+        let includePrereleases = includesPrereleases
         do {
-            let releases = try await Self.fetchReleases()
+            let releases = try await Self.fetchReleases(current: currentVersion, includePrereleases: includePrereleases)
             guard let found = UpdateOffer.select(
-                from: releases, current: currentVersion, includePrereleases: includesPrereleases
+                from: releases, current: currentVersion, includePrereleases: includePrereleases
             ) else {
                 offer = nil
                 checkState = .upToDate
@@ -162,10 +163,64 @@ final class Updater: ObservableObject {
         }
     }
 
-    private static func fetchReleases() async throws -> [GitHubRelease] {
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=30")!)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+    /// Reads the releases from the repository's Atom feed and finds the archive of the newest
+    /// one that may be offered. Everything comes from github.com rather than the REST API, whose
+    /// 60 unauthenticated requests per hour are shared by every client behind the same IP.
+    ///
+    /// The feed holds only the 10 newest releases, so notes reach back at most that far. When it
+    /// has no stable release at all (a run of prereleases), the latest stable one is found
+    /// through the `releases/latest` redirect so the stable channel still sees it.
+    private static func fetchReleases(current: SemanticVersion, includePrereleases: Bool) async throws -> [GitHubRelease] {
+        let feedURL = URL(string: "https://github.com/\(repository)/releases.atom")!
+        let (data, _) = try await send(feedURL, method: "GET", accept: "application/atom+xml")
+        var releases = try ReleaseFeed.parse(data)
+
+        if !includePrereleases,
+           !releases.contains(where: { $0.version?.isPrerelease == false }),
+           let latest = try await latestStableRelease(),
+           !releases.contains(where: { $0.version == latest.version }) {
+            releases.append(latest)
+        }
+
+        // A release whose archive is still uploading is passed over for the next newest.
+        for (version, release) in UpdateOffer.candidates(from: releases, current: current, includePrereleases: includePrereleases) {
+            guard let archive = try await findArchive(of: release, version: version) else { continue }
+            if let index = releases.firstIndex(of: release) { releases[index].assets = [archive] }
+            break
+        }
+        return releases
+    }
+
+    /// The latest stable release, which `github.com/{repo}/releases/latest` redirects to,
+    /// without notes. Nil when the repository has none.
+    private static func latestStableRelease() async throws -> GitHubRelease? {
+        let (_, response) = try await send(URL(string: "https://github.com/\(repository)/releases/latest")!, method: "HEAD")
+        guard let pageURL = response.url,
+              pageURL.deletingLastPathComponent().lastPathComponent == "tag",
+              SemanticVersion(pageURL.lastPathComponent) != nil
+        else { return nil }
+        return GitHubRelease(tagName: pageURL.lastPathComponent, body: nil, pageURL: pageURL, publishedAt: nil, assets: [])
+    }
+
+    /// The release's app archive, or nil while it hasn't been uploaded.
+    private static func findArchive(of release: GitHubRelease, version: SemanticVersion) async throws -> GitHubRelease.Asset? {
+        let url = GitHubRelease.archiveURL(repository: repository, tag: release.tagName, version: version)
+        do {
+            let (_, response) = try await send(url, method: "HEAD")
+            return GitHubRelease.Asset(
+                name: GitHubRelease.archiveName(for: version),
+                downloadURL: url,
+                size: max(0, Int(response.expectedContentLength))
+            )
+        } catch UpdateError.github(status: 404) {
+            return nil
+        }
+    }
+
+    private static func send(_ url: URL, method: String, accept: String? = nil) async throws -> (Data, HTTPURLResponse) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
         request.setValue("InvestStats/\(AppVersion.release?.description ?? AppVersion.shortVersion)", forHTTPHeaderField: "User-Agent")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let data: Data
@@ -175,8 +230,8 @@ final class Updater: ObservableObject {
         } catch {
             throw UpdateError.transport(error.localizedDescription)
         }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw UpdateError.github(status: status) }
-        return try GitHubRelease.makeDecoder().decode([GitHubRelease].self, from: data)
+        guard let http = response as? HTTPURLResponse else { throw UpdateError.github(status: 0) }
+        guard http.statusCode == 200 else { throw UpdateError.forResponse(http) }
+        return (data, http)
     }
 }

@@ -148,6 +148,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.
 - **Updates come only from this repository's GitHub Releases.**
   - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.
+  - It reads github.com, not the REST API: the `releases.atom` feed, the `releases/latest` redirect and the asset's download URL. The API allows 60 unauthenticated requests per hour per IP, shared by everything behind the same address, so checks failed with rate limits on shared networks.
   - It installs a download only if its signature satisfies the running app's designated requirement (same bundle id and Developer ID team) and its `TossBarReleaseVersion` matches the tag.
   - Local builds have no `TossBarReleaseVersion`, so they never update themselves.
 - **Bundle id `me.0x1f320.invest-stats` stays fixed.** Changing it resets user settings, the macOS "Allow in Menu Bar" entry and launch at login, and existing installs can't update across it.
