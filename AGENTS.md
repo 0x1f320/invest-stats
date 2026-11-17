@@ -125,8 +125,9 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - `behavior = []` (menu bar managers simulate ⌘-drag).
   - Fixed width that only grows, padded by text width + 4 pt.
   - The title is reassigned only when it changes.
-- **Menu bar text is white by default.** An asset item can opt into trend colors (`colorByTrend`), which color only its profit and rate by their sign, following the app's color convention. Labels, placeholders and stock items stay white.
-  - The general setting `dimClosedMarkets`, off by default, halves the opacity of an item's whole title, trend colors included, while every market the item follows is closed. Anything unknown counts as open, so an item is never dimmed on a guess.
+- **Menu bar text uses the system's label color by default** (`NSColor.menuBarText`, which is `labelColor`): white on a dark menu bar, like the system's own items. An asset item can opt into trend colors (`colorByTrend`), which color only its profit and rate by their sign, following the app's color convention. Labels, placeholders and stock items keep the plain color.
+  - Keep plain text semantic, never a fixed color such as `.white`. The menu bar draws semantic colors with vibrancy, and that is what dims them on displays whose menu bar isn't active; a fixed color stays at full brightness there.
+  - The general setting `dimClosedMarkets`, off by default, dims an item's whole title while every market the item follows is closed: plain text takes `secondaryLabelColor` (a semantic color with an alpha would resolve to a fixed one) and trend colors halve their opacity. Anything unknown counts as open, so an item is never dimmed on a guess.
 - **Asset title format:** `{profit}₩ ({rate}%)`, for example `+1,019,000₩ (+11.79%)`, unless the item sets a format of its own.
 - **Custom formats are printf style.** An item's `format` uses `%` and a letter per value (`TitleFormat`), `%%` for a literal `%`, and nil or blank for the default text. Saved formats rely on the letters, so never change what an existing letter means.
 - **Connections hold the keys.** A connection is a provider plus its keys, and each item names the connection it reads from (`connectionID`; nil, in items saved before connections, means the first connection).

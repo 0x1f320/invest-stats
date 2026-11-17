@@ -699,6 +699,8 @@ private struct AttributedLabel: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(labelWithAttributedString: text)
         field.lineBreakMode = .byClipping
+        // The strip is always dark, so resolve the semantic text colors as on a dark menu bar.
+        field.appearance = NSAppearance(named: .darkAqua)
         return field
     }
 

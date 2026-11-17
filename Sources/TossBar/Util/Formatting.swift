@@ -1,6 +1,17 @@
 import AppKit
 import SwiftUI
 
+extension NSColor {
+    /// Plain menu bar text: white on a dark menu bar, like the system's own items. It must be
+    /// a semantic color, not `.white`. The menu bar draws semantic colors with vibrancy, which
+    /// is what dims its text on displays whose menu bar isn't active; a fixed color stays at
+    /// full brightness there.
+    static var menuBarText: NSColor { .labelColor }
+
+    /// Plain menu bar text of an item dimmed while its markets are closed.
+    static var menuBarDimmedText: NSColor { .secondaryLabelColor }
+}
+
 extension Decimal {
     var double: Double { NSDecimalNumber(decimal: self).doubleValue }
 }
@@ -129,9 +140,9 @@ enum Trend {
         }
     }
 
-    /// Color for menu bar text. Zero stays white like the rest of the text.
+    /// Color for menu bar text. Zero keeps the plain menu bar text color.
     var menuBarColor: NSColor {
-        self == .flat ? .white : systemColor
+        self == .flat ? .menuBarText : systemColor
     }
 
     private var tone: Palette.Tone? {

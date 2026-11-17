@@ -221,11 +221,21 @@ enum TitleRenderer {
     private static func dimmedIfClosed(_ title: NSAttributedString, config: MenuItemConfig,
                                        data: MarketDataService?, env: AppEnvironment) -> NSAttributedString {
         guard env.settings.dimClosedMarkets, let data, data.isClosed(config) else { return title }
+        return dimmed(title)
+    }
+
+    /// The title at about half its brightness. The plain text takes `secondaryLabelColor`
+    /// rather than `menuBarText` at half alpha, because a semantic color with an alpha
+    /// resolves to a fixed color and would lose the menu bar's vibrancy.
+    static func dimmed(_ title: NSAttributedString) -> NSAttributedString {
         let result = NSMutableAttributedString(attributedString: title)
         let whole = NSRange(location: 0, length: result.length)
         result.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
             guard let color = value as? NSColor else { return }
-            result.addAttribute(.foregroundColor, value: color.withAlphaComponent(color.alphaComponent * 0.5), range: range)
+            let faded = color == .menuBarText
+                ? .menuBarDimmedText
+                : color.withAlphaComponent(color.alphaComponent * 0.5)
+            result.addAttribute(.foregroundColor, value: faded, range: range)
         }
         return result
     }
@@ -260,15 +270,15 @@ enum TitleRenderer {
         return attributed([prefix, "⚠︎"].compactMap { $0 }.joined(separator: " "))
     }
 
-    /// Menu bar text is white unless an asset item opts into trend colors.
-    private static func attributed(_ text: String, color: NSColor = .white) -> NSAttributedString {
+    /// Menu bar text takes `menuBarText` unless an asset item opts into trend colors.
+    private static func attributed(_ text: String, color: NSColor = .menuBarText) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
     }
 
     private static func attributed(_ pieces: [TitlePiece], signedColor: NSColor) -> NSAttributedString {
         let result = NSMutableAttributedString()
         for piece in pieces.widenedSigned() {
-            result.append(attributed(piece.text, color: piece.isSigned ? signedColor : .white))
+            result.append(attributed(piece.text, color: piece.isSigned ? signedColor : .menuBarText))
         }
         return result
     }
@@ -282,7 +292,7 @@ enum TitleRenderer {
             let pieces = stock.titleFormat.render { token in
                 TitlePiece(data.flatMap { stockValue(token, config: stock, data: $0) } ?? token.example)
             }
-            return dimmedIfClosed(attributed(pieces, signedColor: .white), config: config, data: data, env: env)
+            return dimmedIfClosed(attributed(pieces, signedColor: .menuBarText), config: config, data: data, env: env)
         case .asset(let asset):
             let summary = data.flatMap { assetSummary(asset, data: $0) }
             let pieces = asset.titleFormat.render { token in
@@ -290,14 +300,14 @@ enum TitleRenderer {
                 return live ?? TitlePiece(token.example, isSigned: token.isSigned)
             }
             let trend = summary.map { headlineTrend(asset, summary: $0) } ?? .up
-            let title = attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .white)
+            let title = attributed(pieces, signedColor: asset.colorByTrend ? trend.menuBarColor : .menuBarText)
             return dimmedIfClosed(title, config: config, data: data, env: env)
         case .indicator(let indicator):
             let reading = indicator.indicator.flatMap { data?.indicatorReading($0) }
             let pieces = indicator.titleFormat.render { token in
                 TitlePiece(reading.flatMap { indicatorValue(token, config: indicator, reading: $0) } ?? token.example)
             }
-            return dimmedIfClosed(attributed(pieces, signedColor: .white), config: config, data: data, env: env)
+            return dimmedIfClosed(attributed(pieces, signedColor: .menuBarText), config: config, data: data, env: env)
         }
     }
 
@@ -346,7 +356,7 @@ enum TitleRenderer {
             return attributed("\(prefix) \(failed ? "⚠︎" : "…")")
         }
         let pieces = format.render { TitlePiece(stockValue($0, config: config, data: data) ?? "…") }
-        return attributed(pieces, signedColor: .white)
+        return attributed(pieces, signedColor: .menuBarText)
     }
 
     // MARK: Indicator items
@@ -379,7 +389,7 @@ enum TitleRenderer {
             return attributed("\(prefix) \(failed ? "⚠︎" : "…")")
         }
         let pieces = format.render { TitlePiece(indicatorValue($0, config: config, reading: reading) ?? "…") }
-        return attributed(pieces, signedColor: .white)
+        return attributed(pieces, signedColor: .menuBarText)
     }
 
     // MARK: Asset items
@@ -427,8 +437,8 @@ enum TitleRenderer {
             assetValue(token, config: config, summary: summary)
                 ?? TitlePiece(token.isAmount ? "…₩" : "…", isSigned: token.isSigned)
         }
-        // Labels and other text stay white; the profit and rate take the trend color when enabled.
-        let color = config.colorByTrend ? headlineTrend(config, summary: summary).menuBarColor : .white
+        // Labels and other text keep the plain color; the profit and rate take the trend color when enabled.
+        let color = config.colorByTrend ? headlineTrend(config, summary: summary).menuBarColor : .menuBarText
         return attributed(pieces, signedColor: color)
     }
 }
