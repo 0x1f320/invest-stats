@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.2...v1.2.0-dev.3) (2026-11-17)
+
+### Features
+
+* **api:** add the sellable quantity and order endpoints ([#45](https://github.com/0x1f320/invest-stats/issues/45)) ([5355eb7](https://github.com/0x1f320/invest-stats/commit/5355eb7d7b6dc7e875c2d329885f34c42c9e7eed))
+
 ## [1.2.0-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.1...v1.2.0-dev.2) (2026-11-17)
 
 ### Features
