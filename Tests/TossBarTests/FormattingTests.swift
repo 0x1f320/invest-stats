@@ -50,10 +50,17 @@ struct TrendTests {
         #expect(Trend(0).arrow == "–")
     }
 
-    @Test func menuBarColorKeepsZeroWhite() {
-        #expect(Trend(0).menuBarColor == .white)
-        #expect(Trend(1).menuBarColor != .white)
-        #expect(Trend(-1).menuBarColor != .white)
+    @Test func menuBarColorKeepsZeroPlain() {
+        #expect(Trend(0).menuBarColor == .menuBarText)
+        #expect(Trend(1).menuBarColor != .menuBarText)
+        #expect(Trend(-1).menuBarColor != .menuBarText)
+    }
+
+    /// Plain menu bar text must stay a semantic color, so the menu bar can dim it on
+    /// displays whose menu bar isn't active.
+    @Test func menuBarTextIsSemantic() {
+        #expect(NSColor.menuBarText.type == .catalog)
+        #expect(NSColor.menuBarDimmedText.type == .catalog)
     }
 
     @Test func popoverColorSoftensInDarkMode() {
@@ -71,5 +78,26 @@ struct TrendTests {
             #expect(dark.saturationComponent < 0.5)
             #expect(dark.brightnessComponent == 1)
         }
+    }
+}
+
+@Suite("Dimmed menu bar title")
+@MainActor
+struct DimmedTitleTests {
+    /// Plain text dims to another semantic color: a semantic color given an alpha resolves
+    /// to a fixed one and would no longer dim on an inactive display's menu bar.
+    @Test func plainTextStaysSemantic() {
+        let title = NSAttributedString(string: "삼성전자", attributes: [.foregroundColor: NSColor.menuBarText])
+        let color = TitleRenderer.dimmed(title).attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        #expect(color == .menuBarDimmedText)
+    }
+
+    @Test func trendColorsHalveTheirAlpha() {
+        let title = NSMutableAttributedString(string: "A ", attributes: [.foregroundColor: NSColor.menuBarText])
+        title.append(NSAttributedString(string: "+1%", attributes: [.foregroundColor: NSColor.systemRed]))
+        let dimmed = TitleRenderer.dimmed(title)
+        let color = dimmed.attribute(.foregroundColor, at: 2, effectiveRange: nil) as? NSColor
+        #expect(color?.alphaComponent == 0.5)
+        #expect(dimmed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .menuBarDimmedText)
     }
 }

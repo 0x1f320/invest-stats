@@ -55,7 +55,7 @@ For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, `%l %r
 
 ### Closed markets
 
-Turn on **장이 닫힌 항목 흐리게 표시** in the general settings to dim an item's menu bar text while every market it follows is closed: the stock's market for a stock item, the markets of the holdings for an asset item, and the KRX market for an index or bond yield item. The exchange rate follows no market's hours, so it is never dimmed. The pre, after and US day market sessions count as open. It is off by default, so the text stays white.
+Turn on **장이 닫힌 항목 흐리게 표시** in the general settings to dim an item's menu bar text while every market it follows is closed: the stock's market for a stock item, the markets of the holdings for an asset item, and the KRX market for an index or bond yield item. The exchange rate follows no market's hours, so it is never dimmed. The pre, after and US day market sessions count as open. It is off by default, so the text keeps the menu bar's usual color.
 
 ### Connections
 
