@@ -35,6 +35,13 @@ enum TossAPIError: LocalizedError {
             case "account-not-found": return "계좌를 찾을 수 없습니다."
             case "rate-limit-exceeded", "edge-rate-limit-exceeded": return "요청 한도를 초과했습니다. 잠시 후 다시 시도합니다."
             case "maintenance": return "토스증권 시스템 점검 중입니다."
+            case "order-hours-closed": return "지금은 주문을 받지 않는 시간입니다."
+            case "insufficient-sellable-quantity": return "매도 가능 수량이 부족합니다."
+            case "opposite-pending-order-exists": return "이 종목에 체결되지 않은 매수 주문이 있어 매도할 수 없습니다. 매수 주문을 먼저 취소하세요."
+            case "fractional-quantity-outside-regular-hours": return "소수점 수량은 정규장 마감 1시간 전까지만 주문할 수 있습니다."
+            case "prerequisite-required": return "토스증권 앱에서 약관 동의·투자 교육 등 주문 전 절차를 먼저 마쳐야 합니다."
+            case "account-restricted": return "주문이 제한된 계좌입니다."
+            case "request-in-progress", "idempotency-key-conflict": return "같은 주문을 이미 처리하고 있습니다. 주문 내역을 확인하세요."
             default:
                 if let message, !message.isEmpty { return message }
                 return "요청 실패 (HTTP \(status), \(code))"
@@ -53,6 +60,9 @@ enum RateGroup: Hashable {
     /// `MARKET_INDICATOR` (indicator prices) and `MARKET_INDICATOR_CHART` (indicator candles),
     /// as each endpoint's description names them.
     case marketIndicator, marketIndicatorChart
+    /// `ORDER` (placing, changing and canceling orders) and `ORDER_INFO` (sellable quantity,
+    /// buying power, commissions).
+    case order, orderInfo
 
     var tps: Double {
         switch self {
@@ -66,6 +76,9 @@ enum RateGroup: Hashable {
         case .marketDataChart: return 20
         case .marketIndicator: return 10
         case .marketIndicatorChart: return 5
+        case .order: return 10
+        // 6 per second, but 3 from 09:00 to 09:10 KST; the lower one always holds.
+        case .orderInfo: return 3
         }
     }
 }
@@ -252,6 +265,23 @@ actor TossAPIClient {
         group: RateGroup,
         account: Int64? = nil
     ) async throws -> T {
+        try await request("GET", path, query: query, body: nil, group: group, account: account)
+    }
+
+    /// Sends an API request and decodes its `result`.
+    ///
+    /// A 401 or 429 means the server didn't act on the request, so retrying is safe even
+    /// for an order. Anything else, including a network error after the request may have
+    /// arrived, is thrown and never retried; an order's `clientOrderId` covers a retry by
+    /// the user.
+    private func request<T: Decodable>(
+        _ method: String,
+        _ path: String,
+        query: [URLQueryItem] = [],
+        body: Data?,
+        group: RateGroup,
+        account: Int64? = nil
+    ) async throws -> T {
         var attempt = 0
         var retriedAuth = false
         while true {
@@ -259,6 +289,11 @@ actor TossAPIClient {
             let accessToken = try await accessToken()
 
             var request = URLRequest(url: Self.url(baseURL + path, query: query))
+            request.httpMethod = method
+            if let body {
+                request.httpBody = body
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             if let account {
@@ -386,6 +421,29 @@ actor TossAPIClient {
         if let before { query.append(URLQueryItem(name: "before", value: before)) }
         // Catalog symbols are `[A-Za-z0-9_]`, so they go in the path as they are.
         return try await get("/api/v1/market-indicators/\(symbol)/candles", query: query, group: .marketIndicatorChart)
+    }
+
+    /// How many shares of the stock the account can sell now, net of pending sell orders.
+    func sellableQuantity(symbol: String, account: Int64) async throws -> Decimal {
+        let response: SellableQuantityResponse = try await get(
+            "/api/v1/sellable-quantity",
+            query: [URLQueryItem(name: "symbol", value: symbol)],
+            group: .orderInfo,
+            account: account
+        )
+        return response.sellableQuantity.value
+    }
+
+    /// Places an order in the account. The API accepts it or rejects it; whether it fills
+    /// shows in the order detail.
+    func placeOrder(_ order: OrderRequest, account: Int64) async throws -> OrderReceipt {
+        let body: Data
+        do {
+            body = try JSONEncoder().encode(order)
+        } catch {
+            throw TossAPIError.decoding(String(describing: error))
+        }
+        return try await request("POST", "/api/v1/orders", body: body, group: .order, account: account)
     }
 
     func usdKrwRate() async throws -> ExchangeRate {
