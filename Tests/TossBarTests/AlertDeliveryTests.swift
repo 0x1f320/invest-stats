@@ -39,6 +39,29 @@ struct AlertMessageTests {
         #expect(message.body == "전체 손익 수익률 -10.52% · -1,234,000₩")
     }
 
+    private func holding(_ symbol: String, _ config: StockItemConfig) throws -> StockHolding {
+        let overview = try TossAPIClient.makeDecoder().decode(HoldingsOverview.self, from: Data(Fixtures.holdingsJSON.utf8))
+        return StockHolding(item: try #require(overview.holding(of: symbol)), config: config, usdKrw: 1375)
+    }
+
+    @Test func holdingProfitAlert() throws {
+        let alert = PriceAlert(metric: .holdingProfit, direction: .atOrAbove, threshold: 500_000)
+        let message = AlertMessage.holding(name: "삼성전자", alert: alert, thresholdCurrency: .krw,
+                                           holding: try holding("005930", StockItemConfig(symbol: "005930")),
+                                           price: (57000, .krw))
+        #expect(message.title == "삼성전자 · 보유 수익금 +500,000원 이상")
+        #expect(message.body == "수익금 +700,000원 · 수익률 +14.00% · 보유 100주 · 현재가 57,000원")
+    }
+
+    @Test func holdingRateAlertLeadsWithTheRateOnTheItemsBasis() throws {
+        let alert = PriceAlert(metric: .holdingRate, direction: .atOrBelow, threshold: dec("0.15"))
+        let message = AlertMessage.holding(name: "Apple", alert: alert, thresholdCurrency: .usd,
+                                           holding: try holding("AAPL", StockItemConfig(symbol: "AAPL", afterCost: true)),
+                                           price: nil)
+        #expect(message.title == "Apple · 보유 수익률 +15.00% 이하")
+        #expect(message.body == "세후 수익률 +12.35% · 세후 수익금 +$123.52 · 보유 8주")
+    }
+
     @Test func assetAlertWithoutLabelOrAmount() {
         let alert = PriceAlert(metric: .profitRate, direction: .atOrAbove, threshold: dec("0.03"))
         let message = AlertMessage.asset(label: nil, alert: alert, mode: .daily, rate: dec("0.031"), profit: nil)

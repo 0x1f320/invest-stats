@@ -36,21 +36,21 @@ struct PriceAlertConditionTests {
 
     @Test func priceRearmMarginIsHalfAPercentOfTheThreshold() {
         let alert = PriceAlert(metric: .price, direction: .atOrAbove, threshold: 80000)
-        #expect(alert.rearmMargin == 400)
+        #expect(alert.rearmMargin() == 400)
         #expect(!alert.hasCleared(79600))
         #expect(alert.hasCleared(79599))
     }
 
     @Test func rateRearmMarginIsHalfAPercentagePoint() {
         let alert = PriceAlert(metric: .profitRate, direction: .atOrBelow, threshold: dec("-0.1"))
-        #expect(alert.rearmMargin == dec("0.005"))
+        #expect(alert.rearmMargin() == dec("0.005"))
         #expect(!alert.hasCleared(dec("-0.095")))
         #expect(alert.hasCleared(dec("-0.0949")))
     }
 
     @Test func smallBeyondAlertRearmsHalfwayToZero() {
         let alert = PriceAlert(metric: .changeRate, direction: .beyond, threshold: dec("0.004"))
-        #expect(alert.rearmMargin == dec("0.002"))
+        #expect(alert.rearmMargin() == dec("0.002"))
         #expect(alert.hasCleared(dec("0.0019")))
         #expect(alert.hasCleared(dec("-0.0019")))
         #expect(!alert.hasCleared(dec("-0.002")))
@@ -59,7 +59,9 @@ struct PriceAlertConditionTests {
     @Test func directionsOfferedPerMetric() {
         #expect(AlertMetric.price.directions == [.atOrAbove, .atOrBelow])
         #expect(AlertMetric.changeRate.directions == [.atOrAbove, .atOrBelow, .beyond])
-        #expect(AlertMetric.available(for: .stock(StockItemConfig(symbol: "AAPL"))) == [.price, .changeRate])
+        #expect(AlertMetric.holdingProfit.directions == [.atOrAbove, .atOrBelow, .beyond])
+        #expect(AlertMetric.available(for: .stock(StockItemConfig(symbol: "AAPL")))
+            == [.price, .changeRate, .holdingProfit, .holdingRate])
         #expect(AlertMetric.available(for: .asset(AssetItemConfig())) == [.profitRate])
         #expect(AlertMetric.available(for: .indicator(IndicatorItemConfig(symbol: "KOSPI"))).isEmpty)
     }
@@ -294,14 +296,131 @@ struct ItemStoreAlertTests {
         #expect(ItemStore(defaults: defaults).alerts(of: item.id) == [alert])
     }
 
-    @Test func removesOnlyPriceAlerts() {
+    @Test func removesOnlyPriceAndHoldingProfitAlerts() {
         let store = makeStore()
         var item = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "005930")))
         let rate = PriceAlert(metric: .changeRate, threshold: Decimal(string: "0.05")!)
-        item.alerts = [PriceAlert(metric: .price, threshold: 72000), rate]
+        let holdingRate = PriceAlert(metric: .holdingRate, threshold: Decimal(string: "0.1")!)
+        item.alerts = [PriceAlert(metric: .price, threshold: 72000), rate,
+                       PriceAlert(metric: .holdingProfit, threshold: 1_000_000), holdingRate]
         store.upsert(item)
 
         store.removePriceAlerts(of: item.id)
-        #expect(store.alerts(of: item.id) == [rate])
+        #expect(store.alerts(of: item.id) == [rate, holdingRate])
+    }
+}
+
+@Suite("Holding alerts")
+struct HoldingAlertTests {
+    private func held(_ symbol: String) throws -> HoldingItem {
+        let overview = try TossAPIClient.makeDecoder().decode(HoldingsOverview.self, from: Data(Fixtures.holdingsJSON.utf8))
+        return try #require(overview.holding(of: symbol))
+    }
+
+    @Test func profitThresholdsMayBeZeroOrNegative() {
+        #expect(AlertThreshold.parse("-500,000", metric: .holdingProfit) == -500_000)
+        #expect(AlertThreshold.parse("0", metric: .holdingProfit) == 0)
+        #expect(AlertThreshold.parse("+1,000,000원", metric: .holdingProfit) == 1_000_000)
+        #expect(AlertThreshold.parse("-12.5", metric: .holdingRate) == dec("-0.125"))
+        // A price still has to be positive.
+        #expect(AlertThreshold.parse("0", metric: .price) == nil)
+    }
+
+    @Test func profitRearmMarginIsHalfAPercentOfThePurchaseAmount() {
+        let alert = PriceAlert(metric: .holdingProfit, direction: .atOrAbove, threshold: 1_000_000)
+        #expect(alert.rearmMargin(scale: 5_000_000) == 25_000)
+        #expect(!alert.hasCleared(975_000, scale: 5_000_000))
+        #expect(alert.hasCleared(974_999, scale: 5_000_000))
+        // Without a purchase amount it falls back to the threshold, like a price.
+        #expect(alert.rearmMargin() == 5_000)
+    }
+
+    @Test func breakEvenAlertStillHasAMargin() {
+        let alert = PriceAlert(metric: .holdingProfit, direction: .atOrBelow, threshold: 0)
+        #expect(alert.rearmMargin(scale: 5_000_000) == 25_000)
+        #expect(!alert.hasCleared(20_000, scale: 5_000_000))
+        #expect(alert.hasCleared(25_001, scale: 5_000_000))
+    }
+
+    @Test func crossingBelowBreakEvenFiresOnce() {
+        let alert = PriceAlert(metric: .holdingProfit, direction: .atOrBelow, threshold: 0)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        var state: AlertState?
+        var fired: [Bool] = []
+        for value: Decimal in [100_000, -1_000, -5_000, 10_000, 30_000, -2_000] {
+            let step = AlertEvaluator.step(alert, signature: "s", value: value, scale: 5_000_000,
+                                           previous: state, now: Date(), calendar: calendar)
+            state = step.state
+            fired.append(step.fires)
+        }
+        // 10,000 is inside the 25,000 margin, so only 30,000 re-arms it.
+        #expect(fired == [false, true, false, false, false, true])
+    }
+
+    @Test func thresholdCurrency() {
+        var alert = PriceAlert(metric: .holdingProfit)
+        #expect(alert.thresholdCurrency(trading: .usd) == .usd)
+        alert.currency = .krw
+        #expect(alert.thresholdCurrency(trading: .usd) == .krw)
+        #expect(alert.thresholdCurrency(trading: .krw) == .krw)
+        // Prices stay in the trading currency whatever the field says.
+        alert.metric = .price
+        #expect(alert.thresholdCurrency(trading: .usd) == .usd)
+    }
+
+    @Test func conditionText() {
+        let profit = PriceAlert(metric: .holdingProfit, direction: .atOrBelow, threshold: -500_000)
+        #expect(profit.conditionText(currency: .krw) == "보유 수익금 -500,000원 이하")
+        let dollars = PriceAlert(metric: .holdingProfit, direction: .beyond, threshold: 200)
+        #expect(dollars.conditionText(currency: .usd) == "보유 수익금 ±$200.00 이상 변동")
+        let rate = PriceAlert(metric: .holdingRate, direction: .atOrAbove, threshold: dec("0.2"))
+        #expect(rate.conditionText(currency: .usd) == "보유 수익률 +20.00% 이상")
+    }
+
+    @Test func readsTheHoldingInTheAlertsCurrency() throws {
+        let config = StockItemConfig(symbol: "AAPL", afterCost: true)
+        var alert = PriceAlert(metric: .holdingProfit, currency: .krw)
+        let krw = AlertMonitor.holding(try held("AAPL"), config: config, alert: alert, usdKrw: 1375)
+        #expect(krw.currency == .krw)
+        // 123.52 × 1,375, on the item's after-cost basis
+        #expect(krw.profit == dec("169840"))
+        #expect(krw.purchaseAmount == 1_375_000)
+
+        alert.currency = .native
+        let usd = AlertMonitor.holding(try held("AAPL"), config: config, alert: alert, usdKrw: 1375)
+        #expect(usd.currency == .usd)
+        #expect(usd.profit == dec("123.52"))
+    }
+
+    @Test func rateAlertsKeepTheItemsCurrency() throws {
+        let config = StockItemConfig(symbol: "AAPL", displayCurrency: .krw)
+        let alert = PriceAlert(metric: .holdingRate, currency: .native)
+        let holding = AlertMonitor.holding(try held("AAPL"), config: config, alert: alert, usdKrw: 1375)
+        #expect(holding.currency == .krw)
+        #expect(holding.rate == dec("0.232"))
+    }
+
+    @Test func holdingAlertsFetchHoldingsAndTheRate() {
+        var item = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "AAPL")))
+        #expect(!item.needsHoldings)
+        #expect(![item].needsUsdKrwForStocks)
+
+        item.alerts = [PriceAlert(metric: .holdingRate, isEnabled: false)]
+        #expect(!item.needsHoldings)
+
+        item.alerts = [PriceAlert(metric: .holdingProfit, currency: .krw)]
+        #expect(item.needsHoldings)
+        #expect([item].needsUsdKrwForStocks)
+        #expect([item].holdingStockConfigs.map(\.symbol) == ["AAPL"])
+    }
+
+    @Test func savesTheCurrencyAndDefaultsToTheTradingOne() throws {
+        let alert = PriceAlert(metric: .holdingProfit, direction: .atOrBelow, threshold: -300, currency: .krw)
+        let decoded = try JSONDecoder().decode(PriceAlert.self, from: JSONEncoder().encode(alert))
+        #expect(decoded == alert)
+
+        let old = #"{"id":"6B0F1C9E-8E0B-4E39-9A57-1D1B0B7C1F00","metric":"holdingRate","threshold":"0.1"}"#
+        #expect(try JSONDecoder().decode(PriceAlert.self, from: Data(old.utf8)).currency == .native)
     }
 }

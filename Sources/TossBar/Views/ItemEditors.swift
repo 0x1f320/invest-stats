@@ -535,12 +535,12 @@ struct StockHoldingPane: View {
         store.item(id).flatMap { connections.resolve($0.connectionID)?.id }
     }
 
-    /// Whether the popover or the menu bar format shows the holding.
-    private var needsHoldings: Bool { store.stockConfig(id)?.needsHoldings ?? false }
+    /// Whether the popover, the menu bar format or an alert uses the holding.
+    private var needsHoldings: Bool { store.item(id)?.needsHoldings ?? false }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            CaptionText("이 계좌에서 이 종목을 보유 중이면 평가손익과 수익률을 볼 수 있습니다. 메뉴바에 넣으려면 표시 탭의 메뉴바 형식에 %g (손익), %y (수익률) 등을 추가하세요. 예: %n %p %g (%y)")
+            CaptionText("이 계좌에서 이 종목을 보유 중이면 평가손익과 수익률을 볼 수 있습니다. 메뉴바에 넣으려면 표시 탭의 메뉴바 형식에 %g (손익), %y (수익률) 등을 추가하세요. 예: %n %p %g (%y). 보유 수익금·수익률 알림도 이 계좌와 수익 기준을 따릅니다.")
             Form {
                 Toggle("팝오버에 보유 내역 표시", isOn: store.stockBinding(id, \.showHolding, default: false))
                 AccountPicker(data: env.data, connectionID: connectionID,

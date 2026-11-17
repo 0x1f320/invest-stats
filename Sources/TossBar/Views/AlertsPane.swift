@@ -22,6 +22,7 @@ struct ItemAlertsPane: View {
     private var alerts: [PriceAlert] { item?.alerts ?? [] }
 
     /// The stock's trading currency, which price thresholds are in. KRW for asset items.
+    /// A holding profit alert on a US stock may compare in KRW instead.
     private var currency: Currency {
         guard case .stock(let config)? = item?.kind else { return .krw }
         let service = item.flatMap(data.service(for:))
@@ -44,7 +45,7 @@ struct ItemAlertsPane: View {
                     AlertRow(
                         alert: alert,
                         metrics: AlertMetric.available(for: item.kind),
-                        currency: currency,
+                        tradingCurrency: currency,
                         status: status(of: alert, item: item),
                         update: { change in store.updateAlert(alert.id, of: id, change) },
                         remove: { store.removeAlert(alert.id, of: id) }
@@ -57,7 +58,7 @@ struct ItemAlertsPane: View {
                 Spacer()
             }
 
-            CaptionText("조건을 넘는 순간 한 번 알리고, 값이 기준에서 다시 벗어나야(가격은 기준가의 0.5%, 비율은 0.5%p 이상) 다음에 넘을 때 또 알립니다. 알림을 켤 때 이미 조건을 만족하고 있으면 한 번 벗어났다가 다시 넘을 때 알립니다.")
+            CaptionText("조건을 넘는 순간 한 번 알리고, 값이 기준에서 다시 벗어나야(가격은 기준가의 0.5%, 보유 수익금은 매입금액의 0.5%, 비율은 0.5%p 이상) 다음에 넘을 때 또 알립니다. 알림을 켤 때 이미 조건을 만족하고 있으면 한 번 벗어났다가 다시 넘을 때 알립니다.")
         }
         .editorPane()
         .onAppear { notifier.refreshAuthorization() }
@@ -66,9 +67,9 @@ struct ItemAlertsPane: View {
     private var intro: String {
         switch item?.kind {
         case .stock:
-            var text = "가격이나 전일 대비 등락률이 기준을 넘으면 macOS 알림으로 알려 줍니다. 값은 메뉴바와 같은 토스증권 API 시세를 씁니다. 종목을 바꾸면 가격 알림은 삭제됩니다."
+            var text = "가격, 전일 대비 등락률, 보유 수익금·수익률이 기준을 넘으면 macOS 알림으로 알려 줍니다. 값은 메뉴바와 같은 토스증권 API 값을 씁니다. 보유 알림은 보유 탭의 계좌와 수익 기준을 따르며, 보유하지 않은 동안에는 알리지 않습니다. 종목을 바꾸면 가격·보유 수익금 알림은 삭제됩니다."
             if currency == .usd {
-                text += " 미국 주식의 가격 기준은 달러입니다. 원화로 표시해도 달러 가격으로 비교하므로 환율 변동만으로는 알리지 않습니다."
+                text += " 미국 주식의 가격 기준은 달러입니다. 원화로 표시해도 달러 가격으로 비교하므로 환율 변동만으로는 알리지 않습니다. 보유 수익금은 알림마다 달러와 원화(매매기준율 환산) 중 기준 통화를 고를 수 있습니다."
             }
             return text
         case .asset:
@@ -111,7 +112,7 @@ struct ItemAlertsPane: View {
         if !alert.isEnabled {
             state = "꺼짐"
         } else if observation == nil {
-            state = "시세를 기다리는 중"
+            state = alert.metric.isHolding ? "보유 내역을 기다리는 중 · 보유하지 않은 동안에는 알리지 않음" : "시세를 기다리는 중"
         } else if let saved = monitor.states[alert.id],
                   saved.signature == AlertEvaluator.signature(for: alert, subject: observation!.subject) {
             switch saved.phase {
@@ -129,7 +130,8 @@ struct ItemAlertsPane: View {
 private struct AlertRow: View {
     let alert: PriceAlert
     let metrics: [AlertMetric]
-    let currency: Currency
+    /// The stock's trading currency; KRW for asset items.
+    let tradingCurrency: Currency
     let status: String
     let update: ((inout PriceAlert) -> Void) -> Void
     let remove: () -> Void
@@ -138,15 +140,26 @@ private struct AlertRow: View {
     @State private var text: String
     @State private var isInvalid = false
 
-    init(alert: PriceAlert, metrics: [AlertMetric], currency: Currency, status: String,
+    init(alert: PriceAlert, metrics: [AlertMetric], tradingCurrency: Currency, status: String,
          update: @escaping ((inout PriceAlert) -> Void) -> Void, remove: @escaping () -> Void) {
         self.alert = alert
         self.metrics = metrics
-        self.currency = currency
+        self.tradingCurrency = tradingCurrency
         self.status = status
         self.update = update
         self.remove = remove
         _text = State(initialValue: AlertThreshold.text(alert.threshold, metric: alert.metric))
+    }
+
+    /// The currency the threshold is in.
+    private var currency: Currency { alert.thresholdCurrency(trading: tradingCurrency) }
+
+    private var prompt: String {
+        switch alert.metric {
+        case .price: return "목표가"
+        case .holdingProfit: return currency == .usd ? "예: 500, -200" : "예: 1000000"
+        case .changeRate, .profitRate, .holdingRate: return "예: 5"
+        }
     }
 
     var body: some View {
@@ -171,7 +184,7 @@ private struct AlertRow: View {
                         .labelsHidden()
                         .fixedSize()
                     }
-                    TextField("기준값", text: $text, prompt: Text(alert.metric.isRate ? "예: 5" : "목표가"))
+                    TextField("기준값", text: $text, prompt: Text(prompt))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
                         .multilineTextAlignment(.trailing)
@@ -185,6 +198,15 @@ private struct AlertRow: View {
                     .fixedSize()
                 }
 
+                if alert.metric == .holdingProfit && tradingCurrency == .usd {
+                    Picker("기준 통화", selection: Binding(get: { alert.currency }, set: changeCurrency)) {
+                        Text("달러 ($)").tag(PriceDisplayCurrency.native)
+                        Text("원화 (₩, 매매기준율 환산)").tag(PriceDisplayCurrency.krw)
+                    }
+                    .fixedSize()
+                    .help("원화로 고르면 토스증권의 달러 수익금을 매매기준율로 환산해 비교하므로, 환율 변동만으로도 알릴 수 있습니다.")
+                }
+
                 HStack {
                     Picker("반복", selection: Binding(get: { alert.repeatMode }, set: { r in update { $0.repeatMode = r } })) {
                         ForEach(AlertRepeat.allCases) { Text($0.title).tag($0) }
@@ -195,7 +217,7 @@ private struct AlertRow: View {
                 }
 
                 if isInvalid {
-                    Text(alert.metric.isRate ? "숫자로 입력하세요 (예: 5, -3.5)." : "0보다 큰 숫자로 입력하세요.")
+                    Text(alert.metric.isSigned ? "숫자로 입력하세요 (예: 5, -3.5)." : "0보다 큰 숫자로 입력하세요.")
                         .font(.caption).foregroundStyle(.red)
                 } else {
                     CaptionText(status)
@@ -217,6 +239,17 @@ private struct AlertRow: View {
             // Partway through typing ("-", "1."): keep the last valid threshold.
             isInvalid = text != "-" && !text.hasSuffix(".")
         }
+    }
+
+    /// A threshold in one currency means something else in the other, so switching clears it.
+    private func changeCurrency(_ currency: PriceDisplayCurrency) {
+        guard currency != alert.currency else { return }
+        update {
+            $0.currency = currency
+            $0.threshold = nil
+        }
+        text = ""
+        isInvalid = false
     }
 
     /// A threshold means something else in another metric, so switching clears it.
