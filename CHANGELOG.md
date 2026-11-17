@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.2](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.1...v1.2.0-dev.2) (2026-11-17)
+
+### Features
+
+* **alert:** alert on a stock's holding profit and rate ([#44](https://github.com/0x1f320/invest-stats/issues/44)) ([1b35952](https://github.com/0x1f320/invest-stats/commit/1b359524e2486c111bf29fcfa804de484fdc1e47))
+
 ## [1.2.0-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.4...v1.2.0-dev.1) (2026-11-17)
 
 ### Features
