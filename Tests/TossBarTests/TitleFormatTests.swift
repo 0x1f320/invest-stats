@@ -91,6 +91,31 @@ struct TitleFormatTests {
         #expect(config.needsHoldings)
     }
 
+    @Test func stockPicksTheNotHeldFormatOnlyWhenKnownNotHeld() {
+        var config = StockItemConfig(symbol: "005930", format: "%n %p %g (%y)")
+        #expect(config.notHeldTitleFormat == nil)
+        #expect(config.titleFormat(for: .notHeld) == TitleFormat("%n %p %g (%y)"))
+        config.notHeldFormat = "  "
+        #expect(config.notHeldTitleFormat == nil)
+        config.notHeldFormat = "%n %p %r"
+        #expect(config.titleFormat(for: .notHeld) == TitleFormat("%n %p %r"))
+        // While the holdings load, the held format stays, so the title doesn't flip.
+        #expect(config.titleFormat(for: .unknown) == TitleFormat("%n %p %g (%y)"))
+    }
+
+    @Test func stockNotHeldFormatFallsBackToTheDefault() {
+        let config = StockItemConfig(symbol: "005930", showChange: false, notHeldFormat: "%c")
+        #expect(config.titleFormat(for: .unknown) == TitleFormat("%n %p"))
+        #expect(config.titleFormat(for: .notHeld) == TitleFormat("%c"))
+    }
+
+    @Test func stockNeedsHoldingsForANotHeldFormat() {
+        var config = StockItemConfig(symbol: "005930", notHeldFormat: "%n %p")
+        #expect(config.needsHoldings)
+        config.notHeldFormat = ""
+        #expect(!config.needsHoldings)
+    }
+
     @Test func assetDefaultIsTheDesignFormat() {
         var config = AssetItemConfig()
         #expect(config.titleFormat.string { asset[$0]! } == "+1,019,000₩ (+11.79%)")

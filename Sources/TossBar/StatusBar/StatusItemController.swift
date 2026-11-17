@@ -296,10 +296,9 @@ enum TitleRenderer {
         let data = env.data.service(for: config)
         switch config.kind {
         case .stock(let stock):
-            let pieces = stock.titleFormat.render { token in
-                TitlePiece(data.flatMap { stockValue(token, config: stock, data: $0) } ?? token.example)
-            }
-            return dimmedIfClosed(attributed(pieces, signedColor: .menuBarText), config: config, data: data, env: env)
+            let notHeld: Bool
+            if case .notHeld? = data?.holdingState(for: stock) { notHeld = true } else { notHeld = false }
+            return stockPreview(for: config, notHeld: notHeld, env: env)
         case .asset(let asset):
             let summary = data.flatMap { assetSummary(asset, data: $0) }
             let pieces = asset.titleFormat.render { token in
@@ -316,6 +315,24 @@ enum TitleRenderer {
             }
             return dimmedIfClosed(attributed(pieces, signedColor: .menuBarText), config: config, data: data, env: env)
         }
+    }
+
+    /// The preview of a stock item's format for one holding state. The held format shows
+    /// sample holding values while the account doesn't hold the stock, and the not-held format
+    /// shows them empty, as the menu bar does.
+    static func stockPreview(for config: MenuItemConfig, notHeld: Bool, env: AppEnvironment) -> NSAttributedString {
+        guard case .stock(let stock) = config.kind else { return preview(for: config, env: env) }
+        let data = env.data.service(for: config)
+        let holding = data?.holdingState(for: stock).holding
+        let format = notHeld ? stock.titleFormat(for: .notHeld) : stock.titleFormat
+        let pieces = format.render { token in
+            guard token.isHolding else {
+                return TitlePiece(data.flatMap { stockValue(token, config: stock, data: $0) } ?? token.example)
+            }
+            if notHeld { return TitlePiece("") }
+            return TitlePiece(holding.flatMap { holdingValue(token, holding: $0) } ?? token.example)
+        }
+        return dimmedIfClosed(attributed(pieces, signedColor: .menuBarText), config: config, data: data, env: env)
     }
 
     // MARK: Stock items
@@ -374,7 +391,7 @@ enum TitleRenderer {
     }
 
     private static func stockTitle(_ config: StockItemConfig, data: MarketDataService) -> NSAttributedString {
-        let format = config.titleFormat
+        let format = config.titleFormat(for: data.holdingState(for: config))
         guard data.quotes[config.symbol] != nil else {
             let failed = data.symbolErrors[config.symbol] != nil || (data.errorMessage != nil && !data.isRefreshing)
             let prefix = format.uses(.name) ? stockName(config, data: data) : config.symbol

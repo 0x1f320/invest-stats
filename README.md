@@ -48,10 +48,16 @@ Each item can replace its menu bar text with a format of its own, set in the **�
 | `%r` | Change rate since the previous close | Profit rate | Change rate since the previous close (empty for the exchange rate) |
 | `%a` | Change amount since the previous close | | Change since the previous close, in `%p` for yields (empty for the exchange rate) |
 | `%l` | | Label | |
-| `%v` | | Market value | |
+| `%v` | Market value of the holding | Market value | |
 | `%b` | | Purchase amount | |
+| `%g` | Profit on the holding | | |
+| `%y` | Profit rate of the holding | | |
+| `%q` | Quantity held | | |
+| `%u` | Average purchase price | | |
 
 For example, `%n %p (%a, %r)` shows `삼성전자 72,000 (+900, +1.23%)`, `%l %r` shows `💰 +11.79%`, and `%c %p %a` on a bond yield shows `KR_BOND_10Y 3.215% -0.035%p`.
+
+A stock item's holding codes (`%g`, `%y`, `%q`, `%v`, `%u`) show the stock's holding in the account chosen in the **보유** (Holding) tab, and are empty while that account doesn't hold the stock. A stock item can also set a second format, under **미보유** (Not held) in the Display tab, that replaces its format while the account doesn't hold the stock: for example `%n %p %g (%y)` while held and `%n %p %r` otherwise. Left empty, the item keeps its one format. While the holdings are loading, the item uses the held format.
 
 ### Closed markets
 
