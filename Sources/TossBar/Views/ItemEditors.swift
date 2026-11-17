@@ -457,14 +457,20 @@ struct StockDisplayPane: View {
     @State private var displayName: String
     /// Kept as typed; the store gets nil when blank.
     @State private var format: String
+    /// Kept as typed; the store gets nil when blank.
+    @State private var notHeldFormat: String
+    /// Which of the two formats the editor shows.
+    @State private var editsNotHeld = false
 
     init(env: AppEnvironment, id: UUID) {
         self.env = env
         self.id = id
         self.store = env.store
         self.data = env.data
-        _displayName = State(initialValue: env.store.stockConfig(id)?.displayName ?? "")
-        _format = State(initialValue: env.store.stockConfig(id)?.format ?? "")
+        let config = env.store.stockConfig(id)
+        _displayName = State(initialValue: config?.displayName ?? "")
+        _format = State(initialValue: config?.format ?? "")
+        _notHeldFormat = State(initialValue: config?.notHeldFormat ?? "")
     }
 
     private var isUS: Bool {
@@ -501,17 +507,47 @@ struct StockDisplayPane: View {
             Divider()
 
             if let item = store.item(id), let config = store.stockConfig(id) {
-                TitleFormatEditor<StockTitleToken>(
-                    format: $format,
-                    defaultFormat: config.defaultFormat,
-                    preview: TitleRenderer.preview(for: item, env: env)
-                )
+                if editsNotHeld {
+                    // Blank falls back to the held format, so that is what it starts from.
+                    let heldFormat = format.nilIfBlank ?? config.defaultFormat
+                    TitleFormatEditor<StockTitleToken>(
+                        format: $notHeldFormat,
+                        defaultFormat: heldFormat,
+                        tokens: StockTitleToken.allCases.filter { !$0.isHolding },
+                        blankCaption: "비워 두면 보유 중 형식(\(heldFormat))을 그대로 쓰고, 보유 값은 비어 있게 표시됩니다.",
+                        preview: TitleRenderer.stockPreview(for: item, notHeld: true, env: env),
+                        accessory: AnyView(targetPicker)
+                    )
+                } else {
+                    TitleFormatEditor<StockTitleToken>(
+                        format: $format,
+                        defaultFormat: config.defaultFormat,
+                        preview: TitleRenderer.stockPreview(for: item, notHeld: false, env: env),
+                        accessory: AnyView(targetPicker)
+                    )
+                }
+                CaptionText("미보유 형식은 보유 탭의 계좌에서 이 종목을 보유하지 않을 때 씁니다. 보유 내역을 불러오는 동안에는 보유 중 형식을 씁니다.")
             }
         }
         .editorPane()
         .onChange(of: format) { _, format in
             store.updateStock(id) { $0.format = format.nilIfBlank == nil ? nil : format }
         }
+        .onChange(of: notHeldFormat) { _, format in
+            store.updateStock(id) { $0.notHeldFormat = format.nilIfBlank == nil ? nil : format }
+        }
+    }
+
+    /// Switches the editor between the format for a held stock and the one for a stock the
+    /// account doesn't hold.
+    private var targetPicker: some View {
+        Picker("형식 대상", selection: $editsNotHeld) {
+            Text("보유 중").tag(false)
+            Text("미보유").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
     }
 }
 
@@ -540,7 +576,7 @@ struct StockHoldingPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            CaptionText("이 계좌에서 이 종목을 보유 중이면 평가손익과 수익률을 볼 수 있습니다. 메뉴바에 넣으려면 표시 탭의 메뉴바 형식에 %g (손익), %y (수익률) 등을 추가하세요. 예: %n %p %g (%y). 보유 수익금·수익률 알림도 이 계좌와 수익 기준을 따릅니다.")
+            CaptionText("이 계좌에서 이 종목을 보유 중이면 평가손익과 수익률을 볼 수 있습니다. 메뉴바에 넣으려면 표시 탭의 메뉴바 형식에 %g (손익), %y (수익률) 등을 추가하세요. 예: %n %p %g (%y). 보유하지 않을 때의 형식은 표시 탭의 '미보유' 에서 따로 정할 수 있습니다. 보유 수익금·수익률 알림도 이 계좌와 수익 기준을 따릅니다.")
             Form {
                 Toggle("팝오버에 보유 내역 표시", isOn: store.stockBinding(id, \.showHolding, default: false))
                 AccountPicker(data: env.data, connectionID: connectionID,
@@ -698,15 +734,24 @@ struct AssetDisplayPane: View {
 // MARK: - Menu bar format
 
 /// The menu bar format of an item's display pane: the format field, the tokens it can use,
-/// and a preview of the result.
+/// and a preview of the result. `accessory` sits at the end of the heading.
 struct TitleFormatEditor<Token: TitleToken>: View {
     @Binding var format: String
+    /// What a blank format shows, and what a token added to a blank format is added to.
     let defaultFormat: String
+    var tokens: [Token] = Array(Token.allCases)
+    /// What a blank format does. nil says it uses the default format.
+    var blankCaption: String?
     let preview: NSAttributedString
+    var accessory: AnyView?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("메뉴바 형식").font(.headline)
+            HStack {
+                Text("메뉴바 형식").font(.headline)
+                Spacer()
+                accessory
+            }
             HStack {
                 TextField("메뉴바 형식", text: $format, prompt: Text(defaultFormat))
                     .labelsHidden()
@@ -715,10 +760,10 @@ struct TitleFormatEditor<Token: TitleToken>: View {
                 Button("기본값", action: { format = "" })
                     .disabled(format.isEmpty)
             }
-            CaptionText("비워 두면 기본 형식(\(defaultFormat))을 씁니다. 코드를 누르면 형식 끝에 추가되고, %% 는 % 문자 그대로 표시됩니다.")
+            CaptionText("\(blankCaption ?? "비워 두면 기본 형식(\(defaultFormat))을 씁니다.") 코드를 누르면 형식 끝에 추가되고, %% 는 % 문자 그대로 표시됩니다.")
 
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
-                ForEach(Array(Token.allCases), id: \.self) { token in
+                ForEach(tokens, id: \.self) { token in
                     GridRow {
                         Button(token.code, action: { append(token) })
                             .buttonStyle(.link)

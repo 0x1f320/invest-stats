@@ -27,6 +27,9 @@ struct StockItemConfig: Codable, Hashable {
     /// Custom menu bar format, such as `%n %p (%r)`. nil uses `defaultFormat`, which follows
     /// `showName` and `showChange`. See `TitleFormat`.
     var format: String?
+    /// Menu bar format used while `accountSeq`'s account doesn't hold the stock. nil uses
+    /// `format` either way, with the holding tokens empty.
+    var notHeldFormat: String?
     /// Shows the holding of the stock in `accountSeq`'s account in the popover. The menu bar
     /// shows it only through the holding tokens of a custom format.
     var showHolding: Bool = false
@@ -38,7 +41,7 @@ struct StockItemConfig: Codable, Hashable {
 
 extension StockItemConfig {
     private enum CodingKeys: String, CodingKey {
-        case symbol, displayName, showName, showChange, displayCurrency, format, showHolding, accountSeq, afterCost
+        case symbol, displayName, showName, showChange, displayCurrency, format, notHeldFormat, showHolding, accountSeq, afterCost
     }
 
     /// Fills defaults for keys that older saved configs don't have.
@@ -50,6 +53,7 @@ extension StockItemConfig {
         showChange = try c.decodeIfPresent(Bool.self, forKey: .showChange) ?? true
         displayCurrency = try c.decodeIfPresent(PriceDisplayCurrency.self, forKey: .displayCurrency) ?? .native
         format = try c.decodeIfPresent(String.self, forKey: .format)
+        notHeldFormat = try c.decodeIfPresent(String.self, forKey: .notHeldFormat)
         showHolding = try c.decodeIfPresent(Bool.self, forKey: .showHolding) ?? false
         accountSeq = try c.decodeIfPresent(Int64.self, forKey: .accountSeq)
         afterCost = try c.decodeIfPresent(Bool.self, forKey: .afterCost) ?? false

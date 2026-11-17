@@ -282,14 +282,28 @@ extension StockItemConfig {
         [showName ? "%n" : nil, "%p", showChange ? "%r" : nil].compactMap { $0 }.joined(separator: " ")
     }
 
+    /// The format while the account holds the stock, and while its holdings load.
     var titleFormat: TitleFormat<StockTitleToken> {
         TitleFormat(format?.nilIfBlank ?? defaultFormat)
     }
 
-    /// Whether the item shows its holding in the popover or its format, so its account's
-    /// holdings are fetched.
+    /// The format while the account doesn't hold the stock, or nil when the item keeps
+    /// `titleFormat` and shows its holding tokens empty.
+    var notHeldTitleFormat: TitleFormat<StockTitleToken>? {
+        notHeldFormat?.nilIfBlank.map { TitleFormat($0) }
+    }
+
+    /// The format for a holding state. Only a known `.notHeld` switches to the not-held
+    /// format, so the title doesn't flip while the holdings load.
+    func titleFormat(for state: StockHoldingState) -> TitleFormat<StockTitleToken> {
+        if case .notHeld = state, let notHeld = notHeldTitleFormat { return notHeld }
+        return titleFormat
+    }
+
+    /// Whether the item shows its holding in the popover or its format, or picks its format
+    /// by whether the stock is held, so its account's holdings are fetched.
     var needsHoldings: Bool {
-        showHolding || titleFormat.segments.contains {
+        showHolding || notHeldTitleFormat != nil || titleFormat.segments.contains {
             if case .token(let token) = $0 { return token.isHolding }
             return false
         }

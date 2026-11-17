@@ -17,6 +17,13 @@ struct StockItemConfigTests {
         #expect(config.showHolding == false)
         #expect(config.accountSeq == nil)
         #expect(config.afterCost == false)
+        #expect(config.notHeldFormat == nil)
+    }
+
+    @Test func roundTripsNotHeldFormat() throws {
+        let item = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "AAPL", format: "%n %g", notHeldFormat: "%n %p")))
+        let decoded = try JSONDecoder().decode(MenuItemConfig.self, from: JSONEncoder().encode(item))
+        #expect(decoded == item)
     }
 
     @Test func roundTripsHolding() throws {
