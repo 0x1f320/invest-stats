@@ -129,6 +129,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Keep plain text semantic, never a fixed color such as `.white`. The menu bar draws semantic colors with vibrancy, and that is what dims them on displays whose menu bar isn't active; a fixed color stays at full brightness there.
   - The general setting `dimClosedMarkets`, off by default, dims an item's whole title while every market the item follows is closed: plain text takes `secondaryLabelColor` (a semantic color with an alpha would resolve to a fixed one) and trend colors halve their opacity. Anything unknown counts as open, so an item is never dimmed on a guess.
 - **Asset title format:** `{profit}₩ ({rate}%)`, for example `+1,019,000₩ (+11.79%)`, unless the item sets a format of its own.
+- **A stock item can show its holding:** the profit on that stock in one account of the item's connection (`accountSeq`; nil means the first account), raw or after fees and taxes (`afterCost`). Its amounts follow the item's price currency, so a US holding shown in KRW is converted at the base rate like the price. `showHolding` adds it to the popover; the menu bar shows it only through the holding tokens of a custom format (`%g`, `%y`, `%q`, `%v`, `%u`), which are empty while the account doesn't hold the stock. The default format stays the price.
 - **Custom formats are printf style.** An item's `format` uses `%` and a letter per value (`TitleFormat`), `%%` for a literal `%`, and nil or blank for the default text. Saved formats rely on the letters, so never change what an existing letter means.
 - **Connections hold the keys.** A connection is a provider plus its keys, and each item names the connection it reads from (`connectionID`; nil, in items saved before connections, means the first connection).
   - Each connection has its own `TossAPIClient` and `MarketDataService`; one polling loop in `MarketDataHub` refreshes them all.
@@ -144,6 +145,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Only one token per client is valid, so cache it per connection. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
   - Space requests per rate limit group, per connection.
   - Batch price requests across all items of a connection.
+  - Fetch holdings once per account, shared by the asset items and the stock items that show a holding (`needsHoldings`). Stock items that don't show one never fetch holdings.
   - Market calendars (`MarketCalendar`) are cached per connection and market, and fetched again only every 6 hours, once the next business day starts, or 5 minutes after a failure.
   - While every market a connection's items follow is closed, the polling loop refreshes it every 5 minutes (`PollingPolicy`). Anything unknown counts as open, so a missing calendar never slows polling.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.

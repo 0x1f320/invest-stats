@@ -515,6 +515,76 @@ struct StockDisplayPane: View {
     }
 }
 
+/// Whether a stock item shows its holding, from which account, and on which profit basis.
+struct StockHoldingPane: View {
+    let env: AppEnvironment
+    let id: UUID
+    @ObservedObject private var store: ItemStore
+    @ObservedObject private var data: MarketDataHub
+    @ObservedObject private var connections: ConnectionStore
+
+    init(env: AppEnvironment, id: UUID) {
+        self.env = env
+        self.id = id
+        self.store = env.store
+        self.data = env.data
+        self.connections = env.connections
+    }
+
+    private var connectionID: UUID? {
+        store.item(id).flatMap { connections.resolve($0.connectionID)?.id }
+    }
+
+    /// Whether the popover or the menu bar format shows the holding.
+    private var needsHoldings: Bool { store.stockConfig(id)?.needsHoldings ?? false }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            CaptionText("이 계좌에서 이 종목을 보유 중이면 평가손익과 수익률을 볼 수 있습니다. 메뉴바에 넣으려면 표시 탭의 메뉴바 형식에 %g (손익), %y (수익률) 등을 추가하세요. 예: %n %p %g (%y)")
+            Form {
+                Toggle("팝오버에 보유 내역 표시", isOn: store.stockBinding(id, \.showHolding, default: false))
+                AccountPicker(data: env.data, connectionID: connectionID,
+                              selection: store.stockBinding(id, \.accountSeq, default: nil))
+                Picker("수익 기준", selection: store.stockBinding(id, \.afterCost, default: false)) {
+                    Text("원본 수익").tag(false)
+                    Text("수수료·세금 제외").tag(true)
+                }
+                .pickerStyle(.segmented)
+                CaptionText("수수료·세금 제외는 토스증권이 계산한 세후 손익을 씁니다. 해외 주식은 가격 표시 통화를 따르고, 원화는 매매기준율로 환산합니다.")
+            }
+            .formStyle(.columns)
+
+            if needsHoldings {
+                status
+            }
+        }
+        .editorPane()
+    }
+
+    /// What the account holds of the stock right now.
+    @ViewBuilder
+    private var status: some View {
+        if let item = store.item(id), let config = store.stockConfig(id), let service = data.service(for: item) {
+            Group {
+                switch service.holdingState(for: config) {
+                case .unknown:
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("보유 내역을 불러오는 중…")
+                    }
+                case .notHeld:
+                    Text("이 계좌에서 보유하지 않은 종목입니다. 보유 값은 비어 있게 표시됩니다.")
+                case .held(let holding):
+                    Text("보유 \(holding.quantityText)주 · \(Fmt.signedAmount(holding.profit, holding.currency)) (\(holding.rateText))")
+                        .monospacedDigit()
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
 // MARK: - Asset item settings
 
 struct AssetAccountPane: View {

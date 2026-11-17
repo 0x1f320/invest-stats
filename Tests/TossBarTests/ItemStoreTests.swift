@@ -56,7 +56,7 @@ struct ItemStoreTests {
         let first = UUID()
         let second = UUID()
         let asset = MenuItemConfig(kind: .asset(AssetItemConfig(accountSeq: 7, colorByTrend: true)), connectionID: first)
-        let stock = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "AAPL")), connectionID: first)
+        let stock = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "AAPL", accountSeq: 7)), connectionID: first)
         store.upsert(asset)
         store.upsert(stock)
 
@@ -68,6 +68,7 @@ struct ItemStoreTests {
         #expect(store.assetConfig(asset.id)?.colorByTrend == true)
         #expect(store.item(stock.id)?.connectionID == second)
         #expect(store.stockConfig(stock.id)?.symbol == "AAPL")
+        #expect(store.stockConfig(stock.id)?.accountSeq == nil)
     }
 
     @Test func keepsTheAccountWhenTheConnectionStaysTheSame() {

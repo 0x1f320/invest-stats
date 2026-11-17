@@ -76,6 +76,21 @@ struct TitleFormatTests {
         #expect(config.titleFormat == TitleFormat("%c %p"))
     }
 
+    @Test func stockDefaultLeavesTheHoldingOut() {
+        let config = StockItemConfig(symbol: "005930", showHolding: true)
+        #expect(config.defaultFormat == "%n %p %r")
+    }
+
+    @Test func stockNeedsHoldingsOnlyWhenItShowsThem() {
+        var config = StockItemConfig(symbol: "005930")
+        #expect(!config.needsHoldings)
+        config.format = "%n %q주"
+        #expect(config.needsHoldings)
+        config.format = "%n %p"
+        config.showHolding = true
+        #expect(config.needsHoldings)
+    }
+
     @Test func assetDefaultIsTheDesignFormat() {
         var config = AssetItemConfig()
         #expect(config.titleFormat.string { asset[$0]! } == "+1,019,000₩ (+11.79%)")

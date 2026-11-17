@@ -20,9 +20,11 @@ extension TitleToken {
     var code: String { "%\(letter)" }
 }
 
-/// Tokens of a stock item's menu bar format.
+/// Tokens of a stock item's menu bar format. The holding tokens show the item's holding of
+/// the stock (`StockHolding`); they are empty while its account doesn't hold the stock.
 enum StockTitleToken: TitleToken {
     case name, symbol, price, changeRate, changeAmount
+    case holdingProfit, holdingRate, holdingQuantity, holdingValue, averagePrice
 
     var letter: Character {
         switch self {
@@ -31,6 +33,11 @@ enum StockTitleToken: TitleToken {
         case .price: return "p"
         case .changeRate: return "r"
         case .changeAmount: return "a"
+        case .holdingProfit: return "g"
+        case .holdingRate: return "y"
+        case .holdingQuantity: return "q"
+        case .holdingValue: return "v"
+        case .averagePrice: return "u"
         }
     }
 
@@ -41,6 +48,11 @@ enum StockTitleToken: TitleToken {
         case .price: return "현재가"
         case .changeRate: return "전일 대비 등락률"
         case .changeAmount: return "전일 대비 등락액"
+        case .holdingProfit: return "보유 손익"
+        case .holdingRate: return "보유 수익률"
+        case .holdingQuantity: return "보유 수량"
+        case .holdingValue: return "보유 평가금액"
+        case .averagePrice: return "평균 매입가"
         }
     }
 
@@ -51,6 +63,19 @@ enum StockTitleToken: TitleToken {
         case .price: return "72,000"
         case .changeRate: return "+1.23%"
         case .changeAmount: return "+900"
+        case .holdingProfit: return "+700,000₩"
+        case .holdingRate: return "+14.00%"
+        case .holdingQuantity: return "100"
+        case .holdingValue: return "5,700,000₩"
+        case .averagePrice: return "50,000"
+        }
+    }
+
+    /// Whether the token shows the holding, which needs the account's holdings.
+    var isHolding: Bool {
+        switch self {
+        case .holdingProfit, .holdingRate, .holdingQuantity, .holdingValue, .averagePrice: return true
+        case .name, .symbol, .price, .changeRate, .changeAmount: return false
         }
     }
 }
@@ -97,7 +122,7 @@ enum AssetTitleToken: TitleToken {
 }
 
 /// Tokens of an indicator item's menu bar format. The letters mean what they mean for a
-/// stock item.
+/// stock item, which also has holding tokens.
 enum IndicatorTitleToken: TitleToken {
     case name, symbol, value, changeRate, changeAmount
 
@@ -251,13 +276,23 @@ extension Array where Element == TitlePiece {
 }
 
 extension StockItemConfig {
-    /// The format the toggles describe, used when no custom format is set.
+    /// The format the toggles describe, used when no custom format is set. The holding is
+    /// never part of it; a custom format adds it with the holding tokens.
     var defaultFormat: String {
         [showName ? "%n" : nil, "%p", showChange ? "%r" : nil].compactMap { $0 }.joined(separator: " ")
     }
 
     var titleFormat: TitleFormat<StockTitleToken> {
         TitleFormat(format?.nilIfBlank ?? defaultFormat)
+    }
+
+    /// Whether the item shows its holding in the popover or its format, so its account's
+    /// holdings are fetched.
+    var needsHoldings: Bool {
+        showHolding || titleFormat.segments.contains {
+            if case .token(let token) = $0 { return token.isHolding }
+            return false
+        }
     }
 }
 

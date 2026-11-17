@@ -156,6 +156,17 @@ final class MarketDataService: ObservableObject {
         config.accountSeq ?? accounts.first?.accountSeq
     }
 
+    func accountSeq(for config: StockItemConfig) -> Int64? {
+        config.accountSeq ?? accounts.first?.accountSeq
+    }
+
+    /// Whether the stock item's account holds its stock, and the holding if it does.
+    func holdingState(for config: StockItemConfig) -> StockHoldingState {
+        guard let seq = accountSeq(for: config), let overview = holdings[seq] else { return .unknown }
+        guard let item = overview.holding(of: config.symbol) else { return .notHeld }
+        return .held(StockHolding(item: item, config: config, usdKrw: usdKrwRate))
+    }
+
     func currency(for symbol: String) -> Currency {
         quotes[symbol]?.currency ?? stockInfo[symbol]?.currency ?? daily[symbol]?.latest.currency ?? .krw
     }
@@ -237,9 +248,10 @@ final class MarketDataService: ObservableObject {
         let items = items()
         let symbols = items.stockSymbols
         let assetConfigs = items.assetConfigs
+        let holdingStocks = items.holdingStockConfigs
 
         // 0) Accounts. ACCOUNT allows 1 request per second, so cache for 10 minutes.
-        if !assetConfigs.isEmpty,
+        if !assetConfigs.isEmpty || !holdingStocks.isEmpty,
            accounts.isEmpty || (lastAccountsFetch.map { Date().timeIntervalSince($0) > 600 } ?? true) {
             do {
                 accounts = try await client.accounts()
@@ -313,8 +325,9 @@ final class MarketDataService: ObservableObject {
             }
         }
 
-        // 5) Holdings, once per account even if several items show it.
+        // 5) Holdings, once per account even if several asset and stock items show it.
         let seqs = Set(assetConfigs.compactMap { accountSeq(for: $0) })
+            .union(holdingStocks.compactMap { accountSeq(for: $0) })
         for seq in seqs.sorted() {
             do {
                 holdings[seq] = try await client.holdings(account: seq)
