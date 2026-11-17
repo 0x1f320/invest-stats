@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.3...v1.2.0-dev.4) (2026-11-17)
+
+### Features
+
+* **alert:** sell a holding from its alert notification ([#46](https://github.com/0x1f320/invest-stats/issues/46)) ([dd05808](https://github.com/0x1f320/invest-stats/commit/dd05808a72818fe034a1fa7ae20ac753b41f7440))
+
 ## [1.2.0-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.2...v1.2.0-dev.3) (2026-11-17)
 
 ### Features
