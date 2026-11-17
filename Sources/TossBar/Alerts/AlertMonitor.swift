@@ -7,10 +7,14 @@ struct AlertObservation: Equatable {
     let value: Decimal
     /// What the value belongs to, such as `stock:005930`. See `AlertEvaluator.signature`.
     let subject: String
-    /// The stock's trading currency; KRW for asset items.
+    /// The currency of `value`: the stock's trading currency, the currency a holding profit
+    /// alert compares in, or KRW for asset items.
     let currency: Currency
     /// Sets the day boundary of "once per day": the exchange's time zone.
     let timeZone: TimeZone
+    /// The holding's purchase amount for a holding profit alert, in `currency`. See
+    /// `PriceAlert.rearmMargin(scale:)`.
+    var scale: Decimal? = nil
 }
 
 /// Watches every item's alerts. Whenever the data changes, it reads each enabled alert's
@@ -62,6 +66,7 @@ final class AlertMonitor: ObservableObject {
                     alert,
                     signature: AlertEvaluator.signature(for: alert, subject: observation.subject),
                     value: observation.value,
+                    scale: observation.scale,
                     previous: previous,
                     now: now,
                     calendar: calendar
@@ -101,10 +106,33 @@ final class AlertMonitor: ObservableObject {
             let rate = AssetSummary(overview: overview, usdKrw: service.usdKrwRate).headline(for: config).rate
             let subject = "asset:\(service.connectionID.uuidString):\(seq):\(config.mode.rawValue):\(config.usesAfterCost)"
             return AlertObservation(value: rate, subject: subject, currency: .krw, timeZone: Currency.krw.marketTimeZone)
+        case (.stock(let config), .holdingProfit), (.stock(let config), .holdingRate):
+            // Nil until the holdings load, and while the account doesn't hold the stock.
+            guard let seq = service.accountSeq(for: config), let overview = service.holdings[seq],
+                  let item = overview.holding(of: config.symbol) else { return nil }
+            let holding = Self.holding(item, config: config, alert: alert, usdKrw: service.usdKrwRate)
+            let subject = "holding:\(service.connectionID.uuidString):\(seq):\(config.symbol):\(config.afterCost)"
+            let timeZone = item.currency.marketTimeZone
+            if alert.metric == .holdingRate {
+                return AlertObservation(value: holding.rate, subject: subject, currency: item.currency, timeZone: timeZone)
+            }
+            // KRW for a US holding waits for the USD/KRW rate rather than compare dollars.
+            let currency = alert.thresholdCurrency(trading: item.currency)
+            guard holding.currency == currency else { return nil }
+            return AlertObservation(value: holding.profit, subject: "\(subject):\(currency.rawValue)",
+                                    currency: currency, timeZone: timeZone, scale: holding.purchaseAmount)
         default:
             // A metric that doesn't apply to the item's kind.
             return nil
         }
+    }
+
+    /// The holding as an alert reads it: on the item's account and profit basis, with
+    /// amounts in the currency a holding profit alert chooses, or the item's otherwise.
+    nonisolated static func holding(_ item: HoldingItem, config: StockItemConfig, alert: PriceAlert, usdKrw: Decimal?) -> StockHolding {
+        var basis = config
+        if alert.metric == .holdingProfit { basis.displayCurrency = alert.currency }
+        return StockHolding(item: item, config: basis, usdKrw: usdKrw)
     }
 
     // MARK: Notification
@@ -113,6 +141,18 @@ final class AlertMonitor: ObservableObject {
         guard let service = data.service(for: item) else { return }
         let message: AlertMessage
         switch item.kind {
+        case .stock(let config) where alert.metric.isHolding:
+            guard let seq = service.accountSeq(for: config),
+                  let held = service.holdings[seq]?.holding(of: config.symbol) else { return }
+            let holding = Self.holding(held, config: config, alert: alert, usdKrw: service.usdKrwRate)
+            let quote = service.quotes[config.symbol]
+            message = AlertMessage.holding(
+                name: config.displayName?.nilIfBlank ?? service.stockInfo[config.symbol]?.name ?? held.name,
+                alert: alert,
+                thresholdCurrency: observation.currency,
+                holding: holding,
+                price: quote.map { ($0.lastPrice.value, $0.currency) }
+            )
         case .stock(let config):
             let quote = service.quotes[config.symbol]
             let conversion = service.priceConversion(symbol: config.symbol, display: config.displayCurrency)
@@ -185,6 +225,28 @@ struct AlertMessage: Equatable {
         return AlertMessage(
             title: "\(name) · \(alert.conditionText(currency: currency))",
             body: parts.compactMap { $0 }.joined(separator: " · ")
+        )
+    }
+
+    /// `삼성전자 · 보유 수익금 +1,000,000원 이상` /
+    /// `수익금 +1,050,000원 · 수익률 +12.30% · 보유 100주 · 현재가 72,500원`
+    static func holding(
+        name: String,
+        alert: PriceAlert,
+        thresholdCurrency: Currency,
+        holding: StockHolding,
+        price: (value: Decimal, currency: Currency)?
+    ) -> AlertMessage {
+        let basis = holding.afterCost ? "세후 " : ""
+        let profitText = "\(basis)수익금 \(Fmt.signedAmount(holding.profit, holding.currency))"
+        let rateText = "\(basis)수익률 \(holding.rateText)"
+        // The value the alert watched comes first.
+        let values = alert.metric == .holdingRate ? [rateText, profitText] : [profitText, rateText]
+        let parts = values + ["보유 \(holding.quantityText)주", price.map { "현재가 \(Fmt.priceWithUnit($0.value, $0.currency))" }]
+            .compactMap { $0 }
+        return AlertMessage(
+            title: "\(name) · \(alert.conditionText(currency: thresholdCurrency))",
+            body: parts.joined(separator: " · ")
         )
     }
 

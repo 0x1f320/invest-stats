@@ -145,7 +145,7 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Only one token per client is valid, so cache it per connection. Before issuing a new token after a 401, use the stored token if another Mac has already replaced the rejected one.
   - Space requests per rate limit group, per connection.
   - Batch price requests across all items of a connection.
-  - Fetch holdings once per account, shared by the asset items and the stock items that show a holding (`needsHoldings`). Stock items that don't show one never fetch holdings.
+  - Fetch holdings once per account, shared by the asset items and the stock items that show a holding or alert on it (`MenuItemConfig.needsHoldings`). Stock items that do neither never fetch holdings.
   - Market calendars (`MarketCalendar`) are cached per connection and market, and fetched again only every 6 hours, once the next business day starts, or 5 minutes after a failure.
   - While every market a connection's items follow is closed, the polling loop refreshes it every 5 minutes (`PollingPolicy`). Anything unknown counts as open, so a missing calendar never slows polling.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.

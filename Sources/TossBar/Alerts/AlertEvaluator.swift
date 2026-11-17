@@ -23,7 +23,7 @@ struct AlertState: Codable, Hashable {
 /// - The first observation only sets a baseline. A condition already met when the alert is
 ///   set up (or after its threshold changes) doesn't fire; the value has to leave it first.
 /// - After firing, the alert waits until the value clears the threshold by
-///   `PriceAlert.rearmMargin`, then fires again on the next crossing.
+///   `PriceAlert.rearmMargin(scale:)`, then fires again on the next crossing.
 /// - `AlertRepeat.oncePerDay` lets at most one crossing per day notify.
 enum AlertEvaluator {
     struct Step: Equatable {
@@ -40,11 +40,14 @@ enum AlertEvaluator {
     /// Advances an alert by one observation of its value.
     /// - Parameters:
     ///   - previous: The saved state, or nil for an alert never observed.
+    ///   - scale: What the re-arm margin of a holding profit alert is a share of: the
+    ///     holding's purchase amount. See `PriceAlert.rearmMargin(scale:)`.
     ///   - calendar: Its time zone sets the day boundary of `oncePerDay`.
     static func step(
         _ alert: PriceAlert,
         signature: String,
         value: Decimal,
+        scale: Decimal? = nil,
         previous: AlertState?,
         now: Date,
         calendar: Calendar
@@ -64,7 +67,7 @@ enum AlertEvaluator {
             state.lastFiredAt = now
             return Step(state: state, fires: true)
         case .triggered:
-            if alert.hasCleared(value) { state.phase = .armed }
+            if alert.hasCleared(value, scale: scale) { state.phase = .armed }
             return Step(state: state, fires: false)
         }
     }

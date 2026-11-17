@@ -159,6 +159,13 @@ struct MenuItemConfig: Codable, Hashable, Identifiable {
     /// Notifications when the item's price or rate crosses a threshold. See `PriceAlert`.
     var alerts: [PriceAlert] = []
 
+    /// Whether a stock item shows its holding (`StockItemConfig.needsHoldings`) or has an
+    /// enabled alert on it, so its account's holdings are fetched.
+    var needsHoldings: Bool {
+        guard case .stock(let config) = kind else { return false }
+        return config.needsHoldings || alerts.contains { $0.isEnabled && $0.metric.isHolding }
+    }
+
     var typeTitle: String {
         switch kind {
         case .stock: return "주가"
@@ -194,11 +201,14 @@ extension Array where Element == MenuItemConfig {
         }
     }
 
-    /// Whether any stock item shows prices in KRW, which needs the USD/KRW rate.
+    /// Whether any stock item shows prices in KRW, or has a holding profit alert in KRW,
+    /// which needs the USD/KRW rate.
     var needsUsdKrwForStocks: Bool {
-        contains {
-            if case .stock(let config) = $0.kind { return config.displayCurrency == .krw }
-            return false
+        contains { item in
+            guard case .stock(let config) = item.kind else { return false }
+            return config.displayCurrency == .krw || item.alerts.contains {
+                $0.isEnabled && $0.metric == .holdingProfit && $0.currency == .krw
+            }
         }
     }
 
@@ -221,11 +231,11 @@ extension Array where Element == MenuItemConfig {
         }
     }
 
-    /// Stock items that show the holding of their stock, so their account's holdings are
-    /// fetched. See `StockItemConfig.needsHoldings`.
+    /// Stock items that show the holding of their stock or alert on it, so their account's
+    /// holdings are fetched. See `MenuItemConfig.needsHoldings`.
     var holdingStockConfigs: [StockItemConfig] {
         compactMap {
-            if case .stock(let config) = $0.kind, config.needsHoldings { return config }
+            if case .stock(let config) = $0.kind, $0.needsHoldings { return config }
             return nil
         }
     }

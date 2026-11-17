@@ -10,6 +10,11 @@ enum AlertMetric: String, Codable, CaseIterable, Identifiable {
     case changeRate
     /// An asset item's profit rate, as a ratio: the API's rate for the item's mode and basis.
     case profitRate
+    /// A stock item's profit on its holding in the item's account, on the item's profit
+    /// basis: the API's amount, in the currency the alert chooses (`PriceAlert.currency`).
+    case holdingProfit
+    /// A stock item's profit rate on its holding, as a ratio: the API's rate.
+    case holdingRate
 
     var id: String { rawValue }
 
@@ -18,20 +23,33 @@ enum AlertMetric: String, Codable, CaseIterable, Identifiable {
         case .price: return "가격"
         case .changeRate: return "전일 대비"
         case .profitRate: return "수익률"
+        case .holdingProfit: return "보유 수익금"
+        case .holdingRate: return "보유 수익률"
         }
     }
 
-    var isRate: Bool { self != .price }
+    var isRate: Bool {
+        switch self {
+        case .price, .holdingProfit: return false
+        case .changeRate, .profitRate, .holdingRate: return true
+        }
+    }
+
+    /// Whether the metric reads the holding of a stock item's account.
+    var isHolding: Bool { self == .holdingProfit || self == .holdingRate }
+
+    /// Whether the metric's value can be negative. Only a price can't.
+    var isSigned: Bool { self != .price }
 
     /// The directions that make sense for the metric. A price has no sign to swing across.
     var directions: [AlertDirection] {
-        isRate ? AlertDirection.allCases : [.atOrAbove, .atOrBelow]
+        isSigned ? AlertDirection.allCases : [.atOrAbove, .atOrBelow]
     }
 
     /// The metrics an item of a kind can watch.
     static func available(for kind: ItemKind) -> [AlertMetric] {
         switch kind {
-        case .stock: return [.price, .changeRate]
+        case .stock: return [.price, .changeRate, .holdingProfit, .holdingRate]
         case .asset: return [.profitRate]
         // Indicator items have no alerts yet.
         case .indicator: return []
@@ -89,6 +107,11 @@ struct PriceAlert: Hashable, Identifiable {
     var threshold: Decimal?
     var repeatMode: AlertRepeat = .everyCross
     var isEnabled = true
+    /// The currency a holding profit alert compares in. For a US stock, `.krw` converts the
+    /// API's dollar amount at the USD/KRW base rate, as the item does when it shows KRW, so
+    /// a move in the exchange rate alone can fire it. Domestic stocks are in KRW either way,
+    /// and other metrics ignore it.
+    var currency: PriceDisplayCurrency = .native
 
     /// Whether the value meets the condition. False while the threshold isn't set.
     func isMet(by value: Decimal) -> Bool {
@@ -102,10 +125,19 @@ struct PriceAlert: Hashable, Identifiable {
 
     /// How far the value has to move back past the threshold before the alert re-arms, so a
     /// value hovering at the threshold doesn't fire on every refresh.
-    /// Prices: 0.5% of the threshold. Rates: 0.5 percentage points.
-    var rearmMargin: Decimal {
+    /// Prices: 0.5% of the threshold. Rates: 0.5 percentage points. Holding profit: 0.5% of
+    /// the purchase amount (`scale`), the same move as 0.5 points of the holding's rate, so
+    /// a threshold of 0 (break-even) still has a margin.
+    func rearmMargin(scale: Decimal? = nil) -> Decimal {
         guard let threshold else { return 0 }
-        let margin = metric.isRate ? Self.rateMargin : abs(threshold) * Self.priceMarginRatio
+        let margin: Decimal
+        if metric.isRate {
+            margin = Self.rateMargin
+        } else if metric == .holdingProfit, let scale, scale != 0 {
+            margin = abs(scale) * Self.priceMarginRatio
+        } else {
+            margin = abs(threshold) * Self.priceMarginRatio
+        }
         // A small ±N% alert re-arms halfway back to zero instead of never.
         return direction == .beyond ? min(margin, abs(threshold) / 2) : margin
     }
@@ -114,9 +146,9 @@ struct PriceAlert: Hashable, Identifiable {
     static let rateMargin = Decimal(string: "0.005")!
 
     /// Whether the value has left the condition by the re-arm margin.
-    func hasCleared(_ value: Decimal) -> Bool {
+    func hasCleared(_ value: Decimal, scale: Decimal? = nil) -> Bool {
         guard let threshold else { return true }
-        let margin = rearmMargin
+        let margin = rearmMargin(scale: scale)
         switch direction {
         case .atOrAbove: return value < threshold - margin
         case .atOrBelow: return value > threshold + margin
@@ -127,7 +159,7 @@ struct PriceAlert: Hashable, Identifiable {
 
 extension PriceAlert: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, metric, direction, threshold, repeatMode, isEnabled
+        case id, metric, direction, threshold, repeatMode, isEnabled, currency
     }
 
     /// Fills defaults for keys that older saved alerts don't have.
@@ -139,6 +171,7 @@ extension PriceAlert: Codable {
         threshold = try c.decodeIfPresent(String.self, forKey: .threshold).flatMap(AlertThreshold.decimal)
         repeatMode = try c.decodeIfPresent(AlertRepeat.self, forKey: .repeatMode) ?? .everyCross
         isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        currency = try c.decodeIfPresent(PriceDisplayCurrency.self, forKey: .currency) ?? .native
     }
 
     /// The threshold is saved as a decimal string, so it reads back exactly.
@@ -150,6 +183,7 @@ extension PriceAlert: Codable {
         try c.encodeIfPresent(threshold.map { "\($0)" }, forKey: .threshold)
         try c.encode(repeatMode, forKey: .repeatMode)
         try c.encode(isEnabled, forKey: .isEnabled)
+        try c.encode(currency, forKey: .currency)
     }
 }
 
@@ -174,8 +208,9 @@ enum AlertThreshold {
         Decimal(string: string, locale: posix)
     }
 
-    /// Parses a typed threshold: a price in the trading currency, or a percentage for rates.
-    /// Grouping separators, units and a leading `+` are ignored. Prices must be positive.
+    /// Parses a typed threshold: a price in the trading currency, an amount, or a percentage
+    /// for rates. Grouping separators, units and a leading `+` are ignored. Prices must be
+    /// positive; a profit may be zero or negative.
     static func parse(_ text: String, metric: AlertMetric) -> Decimal? {
         var cleaned = text.trimmingCharacters(in: .whitespaces)
         for junk in [",", " ", "%", "$", "₩", "원"] {
@@ -188,7 +223,7 @@ enum AlertThreshold {
               let value = decimal(cleaned)
         else { return nil }
         if metric.isRate { return value / 100 }
-        return value > 0 ? value : nil
+        return metric.isSigned || value > 0 ? value : nil
     }
 
     /// The threshold as the text field shows it: `72000`, `185.5`, or `5` for 5%.
@@ -204,22 +239,35 @@ enum AlertThreshold {
         return currency == .usd ? "$" : "원"
     }
 
-    /// A value of the metric for display: `72,000원`, `$185.70`, `+5.12%`.
+    /// A value of the metric for display: `72,000원`, `$185.70`, `+5.12%`, `-1,000,000원`.
     static func format(_ value: Decimal, metric: AlertMetric, currency: Currency) -> String {
-        metric.isRate ? Fmt.percent(ratio: value) : Fmt.priceWithUnit(value, currency)
+        if metric.isRate { return Fmt.percent(ratio: value) }
+        return metric.isSigned ? Fmt.signedAmount(value, currency) : Fmt.priceWithUnit(value, currency)
     }
 }
 
 extension PriceAlert {
     /// The condition in a sentence, such as `가격 72,000원 이상` or `전일 대비 ±5.00% 이상 변동`.
-    /// `currency` is the stock's trading currency; rates ignore it.
+    /// `currency` is the currency the threshold is in (see `thresholdCurrency`); rates
+    /// ignore it.
     func conditionText(currency: Currency) -> String {
         guard let threshold else { return "\(metric.title) 기준값 미설정" }
         switch direction {
         case .beyond:
-            return "\(metric.title) ±\(Fmt.percent(ratio: abs(threshold), signed: false)) 이상 변동"
+            let size = metric.isRate
+                ? Fmt.percent(ratio: abs(threshold), signed: false)
+                : Fmt.priceWithUnit(abs(threshold), currency)
+            return "\(metric.title) ±\(size) 이상 변동"
         case .atOrAbove, .atOrBelow:
             return "\(metric.title) \(AlertThreshold.format(threshold, metric: metric, currency: currency)) \(direction.title)"
         }
+    }
+}
+
+extension PriceAlert {
+    /// The currency the threshold is in, for a stock trading in `trading`. A holding profit
+    /// alert on a US stock follows `currency`; everything else is in the trading currency.
+    func thresholdCurrency(trading: Currency) -> Currency {
+        metric == .holdingProfit && trading == .usd && currency == .krw ? .krw : trading
     }
 }
