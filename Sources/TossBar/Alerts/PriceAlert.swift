@@ -112,6 +112,13 @@ struct PriceAlert: Hashable, Identifiable {
     /// a move in the exchange rate alone can fire it. Domestic stocks are in KRW either way,
     /// and other metrics ignore it.
     var currency: PriceDisplayCurrency = .native
+    /// Adds sell actions (market, or a limit at the current price) to a holding alert's
+    /// notification. Choosing one only opens the sell dialog; nothing is ordered until the
+    /// user confirms there. Other metrics ignore it.
+    var offersSell = false
+
+    /// Whether the alert's notification carries the sell actions.
+    var sellsFromNotification: Bool { offersSell && metric.isHolding }
 
     /// Whether the value meets the condition. False while the threshold isn't set.
     func isMet(by value: Decimal) -> Bool {
@@ -159,7 +166,7 @@ struct PriceAlert: Hashable, Identifiable {
 
 extension PriceAlert: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, metric, direction, threshold, repeatMode, isEnabled, currency
+        case id, metric, direction, threshold, repeatMode, isEnabled, currency, offersSell
     }
 
     /// Fills defaults for keys that older saved alerts don't have.
@@ -172,6 +179,7 @@ extension PriceAlert: Codable {
         repeatMode = try c.decodeIfPresent(AlertRepeat.self, forKey: .repeatMode) ?? .everyCross
         isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         currency = try c.decodeIfPresent(PriceDisplayCurrency.self, forKey: .currency) ?? .native
+        offersSell = try c.decodeIfPresent(Bool.self, forKey: .offersSell) ?? false
     }
 
     /// The threshold is saved as a decimal string, so it reads back exactly.
@@ -184,6 +192,7 @@ extension PriceAlert: Codable {
         try c.encode(repeatMode, forKey: .repeatMode)
         try c.encode(isEnabled, forKey: .isEnabled)
         try c.encode(currency, forKey: .currency)
+        try c.encode(offersSell, forKey: .offersSell)
     }
 }
 
