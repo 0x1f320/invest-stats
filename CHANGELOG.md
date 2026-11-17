@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.5](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.4...v1.2.0-dev.5) (2026-11-17)
+
+### Features
+
+* **stock:** show a separate menu bar format when the stock isn't held ([#47](https://github.com/0x1f320/invest-stats/issues/47)) ([01ee68f](https://github.com/0x1f320/invest-stats/commit/01ee68fd7666a1e19951687fdfbde35e762c7cd1))
+
 ## [1.2.0-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.3...v1.2.0-dev.4) (2026-11-17)
 
 ### Features
