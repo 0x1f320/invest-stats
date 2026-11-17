@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.1](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.4...v1.2.0-dev.1) (2026-11-17)
+
+### Features
+
+* **stock:** show the holding's profit on stock items ([#43](https://github.com/0x1f320/invest-stats/issues/43)) ([5fbf747](https://github.com/0x1f320/invest-stats/commit/5fbf747195deb9414367b117a2d473be6078dda5))
+
 ## [1.1.1-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.3...v1.1.1-dev.4) (2026-11-17)
 
 ### Bug Fixes
