@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1-dev.4](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.3...v1.1.1-dev.4) (2026-11-17)
+
+### Bug Fixes
+
+* **status-bar:** dim menu bar text on inactive displays ([#42](https://github.com/0x1f320/invest-stats/issues/42)) ([a53e87f](https://github.com/0x1f320/invest-stats/commit/a53e87fbc7526e718544efdddfeeb6585575d631))
+
 ## [1.1.1-dev.3](https://github.com/0x1f320/invest-stats/compare/v1.1.1-dev.2...v1.1.1-dev.3) (2026-11-15)
 
 ### Bug Fixes
