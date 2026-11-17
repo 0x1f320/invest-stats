@@ -21,6 +21,9 @@ final class AlertNotifier: NSObject, ObservableObject {
 
     @Published private(set) var authorization: Authorization
 
+    /// Called when the user chooses a sell action on a holding alert's notification.
+    var onSellAction: (SellAction) -> Void = { _ in }
+
     /// nil outside an app bundle.
     private let center: UNUserNotificationCenter?
     private var activationObserver: NSObjectProtocol?
@@ -37,6 +40,7 @@ final class AlertNotifier: NSObject, ObservableObject {
         super.init()
         guard let center else { return }
         center.delegate = self
+        center.setNotificationCategories([Self.sellCategory])
         refreshAuthorization()
         // The user may have changed the setting in System Settings meanwhile.
         activationObserver = NotificationCenter.default.addObserver(
@@ -77,8 +81,20 @@ final class AlertNotifier: NSObject, ObservableObject {
         }
     }
 
-    /// Posts a notification. `thread` groups an item's notifications together.
-    func post(title: String, body: String, thread: String) {
+    /// The actions on a holding alert that offers selling. Each opens the app's sell
+    /// dialog, which asks for the quantity and a confirmation before ordering.
+    private static var sellCategory: UNNotificationCategory {
+        let actions = OrderType.allCases.map {
+            UNNotificationAction(identifier: SellAction.actionIdentifier(for: $0),
+                                 title: SellAction.actionTitle(for: $0),
+                                 options: [.foreground])
+        }
+        return UNNotificationCategory(identifier: SellAction.category, actions: actions, intentIdentifiers: [])
+    }
+
+    /// Posts a notification. `thread` groups an item's notifications together, and
+    /// `sellItem` adds the sell actions for that item.
+    func post(title: String, body: String, thread: String, sellItem: UUID? = nil) {
         guard let center else {
             print("[alert] \(title) — \(body)")
             fflush(stdout)
@@ -89,6 +105,10 @@ final class AlertNotifier: NSObject, ObservableObject {
         content.body = body
         content.sound = .default
         content.threadIdentifier = thread
+        if let sellItem {
+            content.categoryIdentifier = SellAction.category
+            content.userInfo = SellAction.userInfo(itemID: sellItem)
+        }
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(request) { error in
             if let error { print("[alert] could not post a notification: \(error.localizedDescription)") }
@@ -114,5 +134,19 @@ extension AlertNotifier: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
+    }
+
+    /// Hands a chosen sell action to the app. Clicks on the notification itself and
+    /// dismissals do nothing.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let action = SellAction(
+            actionIdentifier: response.actionIdentifier,
+            userInfo: response.notification.request.content.userInfo,
+            deliveredAt: response.notification.date
+        ) else { return }
+        await MainActor.run { self.onSellAction(action) }
     }
 }

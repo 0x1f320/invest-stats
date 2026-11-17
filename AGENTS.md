@@ -148,6 +148,11 @@ Keep these unless a change deliberately revisits them and the PR explains why.
   - Fetch holdings once per account, shared by the asset items and the stock items that show a holding or alert on it (`MenuItemConfig.needsHoldings`). Stock items that do neither never fetch holdings.
   - Market calendars (`MarketCalendar`) are cached per connection and market, and fetched again only every 6 hours, once the next business day starts, or 5 minutes after a failure.
   - While every market a connection's items follow is closed, the polling loop refreshes it every 5 minutes (`PollingPolicy`). Anything unknown counts as open, so a missing calendar never slows polling.
+- **Orders go out only after the user confirms them in the app.** The only order the app places is a sell from a holding alert's notification, and only when that alert opts in (`PriceAlert.offersSell`, off by default).
+  - A notification action only opens the sell dialog (`SellOrderView`); it never orders by itself.
+  - The dialog reads the sellable quantity and the current price from the API. Ordering reads them again, then shows exactly what will be sent in a confirmation whose default button is cancel.
+  - "현재가" is a limit order at the price read just before the confirmation, cut to what the API takes (`OrderNumber`).
+  - Each order carries a `clientOrderId`, kept after a network error so a retry can't place it twice. The client retries only a 401 or 429, which the server didn't act on.
 - **Saved configs stay backward compatible.** New fields use `decodeIfPresent` with defaults, so existing `menuItems.v1` data and connection records keep loading.
 - **Updates come only from this repository's GitHub Releases.**
   - The updater compares `TossBarReleaseVersion` with the release tags and downloads the `InvestStats-<version>.zip` asset, so keep that asset name. The app bundle inside the zip may have any name.

@@ -179,7 +179,8 @@ final class AlertMonitor: ObservableObject {
             // Indicator items have no alert metrics, so nothing of theirs fires.
             return
         }
-        notifier.post(title: message.title, body: message.body, thread: item.id.uuidString)
+        notifier.post(title: message.title, body: message.body, thread: item.id.uuidString,
+                      sellItem: alert.sellsFromNotification ? item.id : nil)
     }
 
     // MARK: Storage

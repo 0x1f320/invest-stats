@@ -12,6 +12,8 @@ enum EditorTarget {
     case newIndicator
     /// An existing item's settings window.
     case item(UUID)
+    /// The sell dialog for a stock item's holding, from an alert's notification.
+    case sell(SellAction)
 
     var key: String {
         switch self {
@@ -19,12 +21,23 @@ enum EditorTarget {
         case .newAsset: return "newAsset"
         case .newIndicator: return "newIndicator"
         case .item(let id): return "item.\(id.uuidString)"
+        // One sell dialog per item: a second action brings the open one forward.
+        case .sell(let action): return "sell.\(action.itemID.uuidString)"
         }
     }
 
     var itemID: UUID? {
-        if case .item(let id) = self { return id }
-        return nil
+        switch self {
+        case .item(let id): return id
+        case .sell(let action): return action.itemID
+        default: return nil
+        }
+    }
+
+    /// Whether the window's title follows the item's name.
+    var isSettings: Bool {
+        if case .item = self { return true }
+        return false
     }
 }
 
@@ -36,6 +49,7 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
     private struct Entry {
         let window: NSWindow
         let itemID: UUID?
+        let isSettings: Bool
     }
 
     private let env: AppEnvironment
@@ -64,7 +78,7 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
         }
         // Offsets each window from the previous one so they don't stack exactly.
         cascadePoint = window.cascadeTopLeft(from: cascadePoint)
-        entries[target.key] = Entry(window: window, itemID: target.itemID)
+        entries[target.key] = Entry(window: window, itemID: target.itemID, isSettings: target.isSettings)
         activate(window)
     }
 
@@ -84,6 +98,9 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
             return makeDialog(title: "자산 항목 추가", AssetAddDialog(env: env, cancel: close, added: added))
         case .newIndicator:
             return makeDialog(title: "지표 항목 추가", IndicatorAddDialog(env: env, cancel: close, added: added))
+        case .sell(let action):
+            guard env.store.item(action.itemID) != nil else { return nil }
+            return makeDialog(title: "매도 주문", SellOrderView(env: env, action: action, close: close))
         case .item(let id):
             guard let item = env.store.item(id) else { return nil }
             let tabs = ToolbarTabController(tabs: settingsTabs(for: item))
@@ -173,7 +190,7 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
         for entry in entries.values {
             guard let id = entry.itemID else { continue }
             if let item = byID[id] {
-                entry.window.title = title(for: item)
+                if entry.isSettings { entry.window.title = title(for: item) }
             } else {
                 // The item was deleted elsewhere; its settings window has nothing left to edit.
                 entry.window.close()

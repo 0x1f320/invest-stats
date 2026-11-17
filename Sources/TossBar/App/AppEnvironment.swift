@@ -31,6 +31,10 @@ final class AppEnvironment: ObservableObject {
         updater = Updater()
         alertNotifier = AlertNotifier()
         alertMonitor = AlertMonitor(store: store, data: data, notifier: alertNotifier)
+        alertNotifier.onSellAction = { [weak self] action in
+            guard let self, self.store.item(action.itemID) != nil else { return }
+            self.openEditor(.sell(action))
+        }
     }
 
     /// Opens an item's settings window, from a menu, popover or the settings list.

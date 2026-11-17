@@ -207,6 +207,16 @@ private struct AlertRow: View {
                     .help("원화로 고르면 토스증권의 달러 수익금을 매매기준율로 환산해 비교하므로, 환율 변동만으로도 알릴 수 있습니다.")
                 }
 
+                if alert.metric.isHolding {
+                    Toggle(isOn: Binding(get: { alert.offersSell }, set: { on in update { $0.offersSell = on } })) {
+                        Text("알림에 매도 버튼 표시 (시장가 · 현재가)")
+                    }
+                    .toggleStyle(.checkbox)
+                    if alert.offersSell {
+                        CaptionText("알림 위에 포인터를 올리면 나타나는 버튼으로 매도 창을 엽니다. 창에서 수량(전량, 75%, 50%, 25%, 직접 입력)을 고르고 한 번 더 확인해야 토스증권에 주문이 전송됩니다.")
+                    }
+                }
+
                 HStack {
                     Picker("반복", selection: Binding(get: { alert.repeatMode }, set: { r in update { $0.repeatMode = r } })) {
                         ForEach(AlertRepeat.allCases) { Text($0.title).tag($0) }
