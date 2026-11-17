@@ -38,6 +38,13 @@ struct StockPopoverView: View {
     /// Currency the popover shows prices in.
     private var currency: Currency { conversion.currency }
 
+    /// Switches the holding's profit basis from the popover. The menu bar follows.
+    private func setAfterCost(_ value: Bool) {
+        guard var config else { return }
+        config.afterCost = value
+        store.updateKind(itemID, .stock(config))
+    }
+
     private func setDisplayCurrency(_ value: PriceDisplayCurrency) {
         guard var config else { return }
         config.displayCurrency = value
@@ -55,6 +62,10 @@ struct StockPopoverView: View {
                 .labelsHidden()
                 chartSection(config)
                 stats(config)
+                if config.showHolding {
+                    Divider()
+                    holdingSection(config)
+                }
             } else {
                 Text("삭제된 항목입니다.").foregroundStyle(.secondary)
             }
@@ -293,6 +304,58 @@ struct StockPopoverView: View {
                             StatCell(title: " ", value: " ")
                         }
                         StatCell(title: "기준일", value: latest.timestamp.formatted(.dateTime.month(.defaultDigits).day()))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Holding
+
+    /// The account's holding of the stock, in the item's display currency.
+    @ViewBuilder
+    private func holdingSection(_ config: StockItemConfig) -> some View {
+        let state = data.holdingState(for: config)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("내 보유").font(.subheadline.weight(.semibold))
+                Spacer()
+                if state.holding != nil {
+                    Picker("수익 기준", selection: Binding(get: { config.afterCost }, set: { setAfterCost($0) })) {
+                        Text("원본").tag(false)
+                        Text("수수료·세금 제외").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .controlSize(.small)
+                    .help("메뉴바와 팝오버에 쓸 수익 기준")
+                }
+            }
+            switch state {
+            case .unknown:
+                Text("보유 내역을 불러오는 중…")
+                    .font(.callout).foregroundStyle(.secondary)
+            case .notHeld:
+                Text("이 계좌에서 보유하지 않은 종목입니다.")
+                    .font(.callout).foregroundStyle(.secondary)
+            case .held(let holding):
+                let c = holding.currency
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                    GridRow {
+                        StatCell(title: config.afterCost ? "손익 · 수수료·세금 제외" : "손익",
+                                 value: "\(Fmt.signedAmount(holding.profit, c)) (\(holding.rateText))",
+                                 valueColor: Trend(holding.profit).color)
+                        StatCell(title: "일간 손익",
+                                 value: "\(Fmt.signedAmount(holding.dailyProfit, c)) (\(Fmt.percent(ratio: holding.dailyRate)))",
+                                 valueColor: Trend(holding.dailyProfit).color)
+                        StatCell(title: "보유 수량", value: "\(holding.quantityText)주")
+                    }
+                    GridRow {
+                        StatCell(title: config.afterCost ? "세후 평가금액" : "평가금액",
+                                 value: Fmt.priceWithUnit(holding.marketValue, c))
+                        StatCell(title: "매입금액", value: Fmt.priceWithUnit(holding.purchaseAmount, c))
+                        StatCell(title: "평균 매입가", value: Fmt.priceWithUnit(holding.averagePrice, c))
                     }
                 }
             }

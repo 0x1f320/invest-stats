@@ -14,6 +14,15 @@ struct StockItemConfigTests {
         #expect(config.symbol == "AAPL")
         #expect(config.showName == false)
         #expect(config.displayCurrency == .native)
+        #expect(config.showHolding == false)
+        #expect(config.accountSeq == nil)
+        #expect(config.afterCost == false)
+    }
+
+    @Test func roundTripsHolding() throws {
+        let item = MenuItemConfig(kind: .stock(StockItemConfig(symbol: "AAPL", showHolding: true, accountSeq: 7, afterCost: true)))
+        let decoded = try JSONDecoder().decode(MenuItemConfig.self, from: JSONEncoder().encode(item))
+        #expect(decoded == item)
     }
 
     @Test func roundTrips() throws {

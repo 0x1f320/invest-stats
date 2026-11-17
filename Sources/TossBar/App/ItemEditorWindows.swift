@@ -118,6 +118,9 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
                 ToolbarTab("display", "표시", symbol: "menubar.rectangle") {
                     StockDisplayPane(env: env, id: id)
                 },
+                ToolbarTab("holding", "보유", symbol: "briefcase") {
+                    StockHoldingPane(env: env, id: id)
+                },
                 ToolbarTab("alerts", "알림", symbol: "bell") {
                     ItemAlertsPane(env: env, id: id)
                 },

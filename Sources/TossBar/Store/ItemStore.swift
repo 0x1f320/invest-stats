@@ -27,11 +27,18 @@ struct StockItemConfig: Codable, Hashable {
     /// Custom menu bar format, such as `%n %p (%r)`. nil uses `defaultFormat`, which follows
     /// `showName` and `showChange`. See `TitleFormat`.
     var format: String?
+    /// Shows the holding of the stock in `accountSeq`'s account in the popover. The menu bar
+    /// shows it only through the holding tokens of a custom format.
+    var showHolding: Bool = false
+    /// The account whose holding is shown. nil means the first account.
+    var accountSeq: Int64?
+    /// Holding profit basis. false: raw profit. true: after fees and taxes.
+    var afterCost: Bool = false
 }
 
 extension StockItemConfig {
     private enum CodingKeys: String, CodingKey {
-        case symbol, displayName, showName, showChange, displayCurrency, format
+        case symbol, displayName, showName, showChange, displayCurrency, format, showHolding, accountSeq, afterCost
     }
 
     /// Fills defaults for keys that older saved configs don't have.
@@ -43,6 +50,9 @@ extension StockItemConfig {
         showChange = try c.decodeIfPresent(Bool.self, forKey: .showChange) ?? true
         displayCurrency = try c.decodeIfPresent(PriceDisplayCurrency.self, forKey: .displayCurrency) ?? .native
         format = try c.decodeIfPresent(String.self, forKey: .format)
+        showHolding = try c.decodeIfPresent(Bool.self, forKey: .showHolding) ?? false
+        accountSeq = try c.decodeIfPresent(Int64.self, forKey: .accountSeq)
+        afterCost = try c.decodeIfPresent(Bool.self, forKey: .afterCost) ?? false
     }
 }
 
@@ -211,6 +221,15 @@ extension Array where Element == MenuItemConfig {
         }
     }
 
+    /// Stock items that show the holding of their stock, so their account's holdings are
+    /// fetched. See `StockItemConfig.needsHoldings`.
+    var holdingStockConfigs: [StockItemConfig] {
+        compactMap {
+            if case .stock(let config) = $0.kind, config.needsHoldings { return config }
+            return nil
+        }
+    }
+
     var assetConfigs: [AssetItemConfig] {
         compactMap {
             if case .asset(let config) = $0.kind { return config }
@@ -300,16 +319,22 @@ final class ItemStore: ObservableObject {
         replaceKind(of: id, with: .indicator(config))
     }
 
-    /// Points an item at another connection. An asset item's account belongs to its old
-    /// connection, so the item goes back to the new connection's first account.
+    /// Points an item at another connection. An asset or stock item's account belongs to its
+    /// old connection, so the item goes back to the new connection's first account.
     func updateConnection(_ id: UUID, to connectionID: UUID?) {
         guard let index = items.firstIndex(where: { $0.id == id }),
               items[index].connectionID != connectionID else { return }
         var item = items[index]
         item.connectionID = connectionID
-        if case .asset(var config) = item.kind {
+        switch item.kind {
+        case .asset(var config):
             config.accountSeq = nil
             item.kind = .asset(config)
+        case .stock(var config):
+            config.accountSeq = nil
+            item.kind = .stock(config)
+        case .indicator:
+            break
         }
         items[index] = item
     }

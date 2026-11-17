@@ -247,16 +247,23 @@ enum TitleRenderer {
         switch config.kind {
         case .stock(let stock):
             let name = data.stockInfo[stock.symbol]?.name ?? stock.symbol
-            return "주가 · \(name) (\(stock.symbol)) · \(connection.connection.displayName)"
+            var tooltip = "주가 · \(name) (\(stock.symbol)) · \(connection.connection.displayName)"
+            if stock.showHolding {
+                tooltip += " · 보유 \(accountName(data.accountSeq(for: stock), data: data))"
+            }
+            return tooltip
         case .asset(let asset):
-            let seq = data.accountSeq(for: asset)
-            let account = data.accounts.first { $0.accountSeq == seq }?.maskedNumber ?? "기본 계좌"
+            let account = accountName(data.accountSeq(for: asset), data: data)
             return "자산 · \(connection.connection.displayName) · \(account) · \(asset.mode.title) · \(asset.usesAfterCost ? "수수료·세금 제외" : "원본 수익")"
         case .indicator(let config):
             guard let indicator = config.indicator else { return "지표 · \(config.symbol) · 지원하지 않는 지표" }
             let name = indicator.category == .exchangeRate ? "\(indicator.name) 매매기준율" : indicator.name
             return "지표 · \(name) (\(indicator.displaySymbol)) · \(connection.connection.displayName)"
         }
+    }
+
+    private static func accountName(_ seq: Int64?, data: MarketDataService) -> String {
+        data.accounts.first { $0.accountSeq == seq }?.maskedNumber ?? "기본 계좌"
     }
 
     /// An item whose connection was deleted, or hasn't synced to this Mac yet.
@@ -336,6 +343,24 @@ enum TitleRenderer {
             guard let quote = data.quotes[config.symbol], let change = data.change(for: config.symbol) else { return nil }
             let sign = change.amount > 0 ? "+" : (change.amount < 0 ? "-" : "")
             return sign + stockPrice(abs(change.amount), quote: quote, config: config, data: data)
+        case .holdingProfit, .holdingRate, .holdingQuantity, .holdingValue, .averagePrice:
+            switch data.holdingState(for: config) {
+            case .unknown: return nil
+            // Empty, so a custom format shows only the price while the stock isn't held.
+            case .notHeld: return ""
+            case .held(let holding): return holdingValue(token, holding: holding)
+            }
+        }
+    }
+
+    private static func holdingValue(_ token: StockTitleToken, holding: StockHolding) -> String? {
+        switch token {
+        case .holdingProfit: return holding.profitText
+        case .holdingRate: return holding.rateText
+        case .holdingQuantity: return holding.quantityText
+        case .holdingValue: return holding.marketValueText
+        case .averagePrice: return holding.averagePriceText
+        case .name, .symbol, .price, .changeRate, .changeAmount: return nil
         }
     }
 

@@ -147,7 +147,8 @@ struct IndicatorItemTests {
 
     @Test func tokenLettersMatchTheStockItem() {
         #expect(Set(IndicatorTitleToken.allCases.map(\.letter)).count == IndicatorTitleToken.allCases.count)
-        #expect(IndicatorTitleToken.allCases.map(\.letter) == StockTitleToken.allCases.map(\.letter))
+        let stockLetters = StockTitleToken.allCases.filter { !$0.isHolding }.map(\.letter)
+        #expect(IndicatorTitleToken.allCases.map(\.letter) == stockLetters)
     }
 
     // MARK: Readings
