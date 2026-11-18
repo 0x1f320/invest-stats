@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import ServiceManagement
 
@@ -7,12 +8,16 @@ import ServiceManagement
 final class AppEnvironment: ObservableObject {
     let settings: AppSettings
     let store: ItemStore
+    /// Alerts added from an item's context menu, kept apart from the items' own alerts.
+    let oneTimeAlerts: OneTimeAlertStore
     let connections: ConnectionStore
     let data: MarketDataHub
     let universe: StockUniverse
     let updater: Updater
     let alertNotifier: AlertNotifier
     let alertMonitor: AlertMonitor
+
+    private var itemsObserver: AnyCancellable?
 
     var openSettings: () -> Void = {}
     /// Opens an add dialog or an item's settings window.
@@ -25,12 +30,18 @@ final class AppEnvironment: ObservableObject {
         if let migrated = ConnectionMigration.runIfNeeded() {
             store.assignConnection(migrated)
         }
+        oneTimeAlerts = OneTimeAlertStore()
+        oneTimeAlerts.keepOnly(items: Set(store.items.map(\.id)))
         connections = ConnectionStore()
-        data = MarketDataHub(connections: connections, store: store, settings: settings)
+        data = MarketDataHub(connections: connections, store: store, oneTimeAlerts: oneTimeAlerts, settings: settings)
         universe = StockUniverse()
         updater = Updater()
         alertNotifier = AlertNotifier()
-        alertMonitor = AlertMonitor(store: store, data: data, notifier: alertNotifier)
+        alertMonitor = AlertMonitor(store: store, oneTimeAlerts: oneTimeAlerts, data: data, notifier: alertNotifier)
+        // A deleted item takes its one-time alerts with it.
+        itemsObserver = store.$items.dropFirst().sink { [oneTimeAlerts] items in
+            oneTimeAlerts.keepOnly(items: Set(items.map(\.id)))
+        }
         alertNotifier.onSellAction = { [weak self] action in
             guard let self, self.store.item(action.itemID) != nil else { return }
             self.openEditor(.sell(action))

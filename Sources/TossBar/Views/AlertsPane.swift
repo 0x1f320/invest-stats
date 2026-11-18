@@ -24,9 +24,7 @@ struct ItemAlertsPane: View {
     /// The stock's trading currency, which price thresholds are in. KRW for asset items.
     /// A holding profit alert on a US stock may compare in KRW instead.
     private var currency: Currency {
-        guard case .stock(let config)? = item?.kind else { return .krw }
-        let service = item.flatMap(data.service(for:))
-        return StockLookup.isUS(config.symbol, universe: env.universe, service: service) ? .usd : .krw
+        item.map(env.tradingCurrency(of:)) ?? .krw
     }
 
     var body: some View {
@@ -46,7 +44,7 @@ struct ItemAlertsPane: View {
                         alert: alert,
                         metrics: AlertMetric.available(for: item.kind),
                         tradingCurrency: currency,
-                        status: status(of: alert, item: item),
+                        status: monitor.statusText(of: alert, item: item),
                         update: { change in store.updateAlert(alert.id, of: id, change) },
                         remove: { store.removeAlert(alert.id, of: id) }
                     )
@@ -59,6 +57,8 @@ struct ItemAlertsPane: View {
             }
 
             CaptionText("조건을 넘는 순간 한 번 알리고, 값이 기준에서 다시 벗어나야(가격은 기준가의 0.5%, 보유 수익금은 매입금액의 0.5%, 비율은 0.5%p 이상) 다음에 넘을 때 또 알립니다. 알림을 켤 때 이미 조건을 만족하고 있으면 한 번 벗어났다가 다시 넘을 때 알립니다.")
+
+            CaptionText("한 번 알리고 사라지는 알림은 메뉴바의 이 항목을 우클릭해 '일회성 알림 추가…'로 따로 만들 수 있습니다. 일회성 알림은 여기에 나오지 않습니다.")
         }
         .editorPane()
         .onAppear { notifier.refreshAuthorization() }
@@ -101,47 +101,25 @@ struct ItemAlertsPane: View {
         // Asked when the first alert is set up, not at launch.
         notifier.requestAuthorizationIfNeeded()
     }
-
-    private func status(of alert: PriceAlert, item: MenuItemConfig) -> String {
-        guard alert.threshold != nil else { return "기준값을 입력하면 확인을 시작합니다." }
-        let observation = monitor.observation(for: alert, of: item)
-        let current = observation.map {
-            "현재 " + AlertThreshold.format($0.value, metric: alert.metric, currency: $0.currency)
-        }
-        let state: String
-        if !alert.isEnabled {
-            state = "꺼짐"
-        } else if observation == nil {
-            state = alert.metric.isHolding ? "보유 내역을 기다리는 중 · 보유하지 않은 동안에는 알리지 않음" : "시세를 기다리는 중"
-        } else if let saved = monitor.states[alert.id],
-                  saved.signature == AlertEvaluator.signature(for: alert, subject: observation!.subject) {
-            switch saved.phase {
-            case .armed: state = "대기 중"
-            case .triggered: state = "조건 충족 중 · 벗어난 뒤 다시 넘으면 알림"
-            }
-        } else {
-            state = "확인 중"
-        }
-        return [current, state].compactMap { $0 }.joined(separator: " · ")
-    }
 }
 
-/// One alert: its condition, threshold and repeat mode.
-private struct AlertRow: View {
+/// One alert: its condition, threshold and repeat mode. Without `remove`, it edits the draft
+/// of a one-time alert, which has no on/off switch or repeat mode.
+struct AlertRow: View {
     let alert: PriceAlert
     let metrics: [AlertMetric]
     /// The stock's trading currency; KRW for asset items.
     let tradingCurrency: Currency
     let status: String
     let update: ((inout PriceAlert) -> Void) -> Void
-    let remove: () -> Void
+    let remove: (() -> Void)?
 
     /// Kept as typed; the alert gets the parsed value, or nil when blank.
     @State private var text: String
     @State private var isInvalid = false
 
     init(alert: PriceAlert, metrics: [AlertMetric], tradingCurrency: Currency, status: String,
-         update: @escaping ((inout PriceAlert) -> Void) -> Void, remove: @escaping () -> Void) {
+         update: @escaping ((inout PriceAlert) -> Void) -> Void, remove: (() -> Void)? = nil) {
         self.alert = alert
         self.metrics = metrics
         self.tradingCurrency = tradingCurrency
@@ -150,6 +128,8 @@ private struct AlertRow: View {
         self.remove = remove
         _text = State(initialValue: AlertThreshold.text(alert.threshold, metric: alert.metric))
     }
+
+    private var isDraft: Bool { remove == nil }
 
     /// The currency the threshold is in.
     private var currency: Currency { alert.thresholdCurrency(trading: tradingCurrency) }
@@ -166,14 +146,19 @@ private struct AlertRow: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Toggle(isOn: Binding(get: { alert.isEnabled }, set: { on in update { $0.isEnabled = on } })) {
+                    if let remove {
+                        Toggle(isOn: Binding(get: { alert.isEnabled }, set: { on in update { $0.isEnabled = on } })) {
+                            Text(alert.conditionText(currency: currency)).fontWeight(.medium)
+                        }
+                        .toggleStyle(.checkbox)
+                        Spacer()
+                        Button(action: remove) { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                            .help("이 알림 삭제")
+                    } else {
                         Text(alert.conditionText(currency: currency)).fontWeight(.medium)
+                        Spacer()
                     }
-                    .toggleStyle(.checkbox)
-                    Spacer()
-                    Button(action: remove) { Image(systemName: "trash") }
-                        .buttonStyle(.borderless)
-                        .help("이 알림 삭제")
                 }
 
                 HStack(spacing: 6) {
@@ -207,23 +192,19 @@ private struct AlertRow: View {
                     .help("원화로 고르면 토스증권의 달러 수익금을 매매기준율로 환산해 비교하므로, 환율 변동만으로도 알릴 수 있습니다.")
                 }
 
-                if alert.metric.isHolding {
-                    Toggle(isOn: Binding(get: { alert.offersSell }, set: { on in update { $0.offersSell = on } })) {
-                        Text("알림에 매도 버튼 표시 (시장가 · 현재가)")
-                    }
-                    .toggleStyle(.checkbox)
-                    if alert.offersSell {
-                        CaptionText("알림 위에 포인터를 올리면 나타나는 버튼으로 매도 창을 엽니다. 창에서 수량(전량, 75%, 50%, 25%, 직접 입력)을 고르고 한 번 더 확인해야 토스증권에 주문이 전송됩니다.")
-                    }
+                if alert.sellsFromNotification {
+                    CaptionText(Self.sellCaption)
                 }
 
-                HStack {
-                    Picker("반복", selection: Binding(get: { alert.repeatMode }, set: { r in update { $0.repeatMode = r } })) {
-                        ForEach(AlertRepeat.allCases) { Text($0.title).tag($0) }
+                if !isDraft {
+                    HStack {
+                        Picker("반복", selection: Binding(get: { alert.repeatMode }, set: { r in update { $0.repeatMode = r } })) {
+                            ForEach(AlertRepeat.allCases) { Text($0.title).tag($0) }
+                        }
+                        .fixedSize()
+                        .help("넘을 때마다: 벗어났다가 다시 넘을 때마다 · 하루 한 번: 거래소 기준 하루에 한 번까지 · 한 번만: 알린 뒤 자동으로 꺼짐")
+                        Spacer()
                     }
-                    .fixedSize()
-                    .help("넘을 때마다: 벗어났다가 다시 넘을 때마다 · 하루 한 번: 거래소 기준 하루에 한 번까지 · 한 번만: 알린 뒤 자동으로 꺼짐")
-                    Spacer()
                 }
 
                 if isInvalid {
@@ -237,6 +218,8 @@ private struct AlertRow: View {
         }
         .onChange(of: text) { _, text in save(text) }
     }
+
+    static let sellCaption = "macOS 알림 위에 포인터를 올리면 나타나는 매도 버튼(시장가 · 현재가)으로 매도 창을 엽니다. 창에서 수량(전량, 75%, 50%, 25%, 직접 입력)을 고르고 한 번 더 확인해야 토스증권에 주문이 전송됩니다."
 
     private func save(_ text: String) {
         if text.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -276,7 +259,7 @@ private struct AlertRow: View {
 }
 
 /// Explains when macOS won't show alerts, and offers the way to fix it.
-private struct PermissionNotice: View {
+struct PermissionNotice: View {
     @ObservedObject var notifier: AlertNotifier
     let hasAlerts: Bool
 

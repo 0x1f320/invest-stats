@@ -57,18 +57,21 @@ struct SellPlanTests {
         #expect(SellAction(actionIdentifier: "sell.market", userInfo: [:], deliveredAt: Date()) == nil)
     }
 
-    @Test func onlyHoldingAlertsOfferSelling() {
-        #expect(PriceAlert(metric: .holdingProfit, offersSell: true).sellsFromNotification)
-        #expect(PriceAlert(metric: .holdingRate, offersSell: true).sellsFromNotification)
-        #expect(!PriceAlert(metric: .holdingRate).sellsFromNotification)
-        #expect(!PriceAlert(metric: .price, offersSell: true).sellsFromNotification)
+    @Test func everyHoldingAlertOffersSelling() {
+        #expect(PriceAlert(metric: .holdingProfit).sellsFromNotification)
+        #expect(PriceAlert(metric: .holdingRate).sellsFromNotification)
+        #expect(!PriceAlert(metric: .price).sellsFromNotification)
+        #expect(!PriceAlert(metric: .changeRate).sellsFromNotification)
+        #expect(!PriceAlert(metric: .profitRate).sellsFromNotification)
     }
 
-    @Test func sellOptionIsSavedAndOffByDefault() throws {
-        let alert = PriceAlert(metric: .holdingRate, threshold: dec("0.2"), offersSell: true)
-        #expect(try JSONDecoder().decode(PriceAlert.self, from: JSONEncoder().encode(alert)) == alert)
+    @Test func theSavedSellOptionOfEarlierBuildsIsIgnored() throws {
+        let off = #"{"id":"6B0F1C9E-8E0B-4E39-9A57-1D1B0B7C1F00","metric":"holdingRate","threshold":"0.1","offersSell":false}"#
+        let alert = try JSONDecoder().decode(PriceAlert.self, from: Data(off.utf8))
+        #expect(alert.threshold == dec("0.1"))
+        #expect(alert.sellsFromNotification)
 
-        let old = #"{"id":"6B0F1C9E-8E0B-4E39-9A57-1D1B0B7C1F00","metric":"holdingRate","threshold":"0.1"}"#
-        #expect(try JSONDecoder().decode(PriceAlert.self, from: Data(old.utf8)).offersSell == false)
+        let encoded = try #require(String(data: JSONEncoder().encode(alert), encoding: .utf8))
+        #expect(!encoded.contains("offersSell"))
     }
 }

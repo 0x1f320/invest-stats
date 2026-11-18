@@ -174,6 +174,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "지금 새로고침", action: #selector(refreshNow), keyEquivalent: "r").target = self
         menu.addItem(withTitle: "이 항목 편집…", action: #selector(editItem), keyEquivalent: "e").target = self
+        addOneTimeAlertItems(to: menu)
         menu.addItem(withTitle: "설정…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "이 항목 삭제", action: #selector(deleteItem), keyEquivalent: "").target = self
@@ -182,6 +183,26 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
     }
 
+    /// "일회성 알림 추가…" for items that have alert metrics, followed by the item's pending
+    /// one-time alerts. Each of them opens the same window, where it can be deleted.
+    private func addOneTimeAlertItems(to menu: NSMenu) {
+        guard !AlertMetric.available(for: config.kind).isEmpty else { return }
+        let add = NSMenuItem(title: "일회성 알림 추가…", action: #selector(openOneTimeAlerts), keyEquivalent: "")
+        add.target = self
+        add.image = NSImage(systemSymbolName: "bell.badge", accessibilityDescription: nil)
+        menu.addItem(add)
+        let currency = env.tradingCurrency(of: config)
+        for alert in env.oneTimeAlerts.alerts(of: id) {
+            let title = alert.conditionText(currency: alert.thresholdCurrency(trading: currency))
+            let entry = NSMenuItem(title: title, action: #selector(openOneTimeAlerts), keyEquivalent: "")
+            entry.target = self
+            entry.indentationLevel = 1
+            entry.toolTip = "대기 중인 일회성 알림 · 한 번 알리고 삭제됩니다"
+            menu.addItem(entry)
+        }
+    }
+
+    @objc private func openOneTimeAlerts() { env.openEditor(.oneTimeAlerts(id)) }
     @objc private func refreshNow() { env.data.refreshSoon() }
     @objc private func openSettings() { env.openSettings() }
     @objc private func editItem() { env.editItem(id) }

@@ -80,6 +80,13 @@ Add as many stock, asset and indicator items as you like, and remove them from t
 
 Positions are kept by macOS. Rearrange items with ⌘-drag or a menu bar manager such as [Thaw](https://github.com/stonerl/Thaw) or [Ice](https://github.com/jordanbaird/Ice).
 
+### Alerts
+
+An item's **알림** (Alerts) settings tab adds alerts that post a macOS notification when a value crosses a threshold: a stock's price, its change, or the profit and rate of its holding, and an asset item's profit rate.
+
+- **One-time alerts:** right-click a stock or asset item and choose **일회성 알림 추가…** for an alert that notifies once and then deletes itself. One-time alerts are kept apart from the item's settings; the same menu lists the pending ones, and its window deletes them.
+- **Selling from a notification:** a holding alert's notification always has 시장가 매도 (market sell) and 현재가 매도 (sell at the current price) buttons. Each only opens a sell dialog; nothing is ordered until you choose the quantity and confirm there.
+
 ### Updates
 
 Invest Stats checks [GitHub Releases](https://github.com/0x1f320/invest-stats/releases) at launch and every 30 minutes. When a newer version is out, it shows the changes since your version and installs the update when you accept, then relaunches.

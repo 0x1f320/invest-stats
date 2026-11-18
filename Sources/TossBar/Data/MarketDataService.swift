@@ -539,6 +539,7 @@ final class MarketDataHub: ObservableObject {
 
     private let connections: ConnectionStore
     private let store: ItemStore
+    private let oneTimeAlerts: OneTimeAlertStore
     private let settings: AppSettings
     private var known: [UUID: StoredConnection] = [:]
     private var forwarders: [UUID: AnyCancellable] = [:]
@@ -549,9 +550,10 @@ final class MarketDataHub: ObservableObject {
     /// Whether each connection's markets were all closed at the last tick.
     private var lastIdle: [UUID: Bool] = [:]
 
-    init(connections: ConnectionStore, store: ItemStore, settings: AppSettings) {
+    init(connections: ConnectionStore, store: ItemStore, oneTimeAlerts: OneTimeAlertStore, settings: AppSettings) {
         self.connections = connections
         self.store = store
+        self.oneTimeAlerts = oneTimeAlerts
         self.settings = settings
         connections.$connections
             .sink { [weak self] list in self?.sync(list) }
@@ -567,9 +569,11 @@ final class MarketDataHub: ObservableObject {
         id.flatMap { services[$0] }
     }
 
-    /// The items that read from a connection.
+    /// The items that read from a connection. Each counts its one-time alerts among its
+    /// alerts, so the holdings and the rate they read are fetched.
     func items(for connectionID: UUID) -> [MenuItemConfig] {
         store.items.filter { connections.resolve($0.connectionID)?.id == connectionID }
+            .includingOneTimeAlerts(oneTimeAlerts.alerts)
     }
 
     // MARK: Polling
