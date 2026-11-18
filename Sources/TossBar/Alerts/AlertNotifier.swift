@@ -81,7 +81,7 @@ final class AlertNotifier: NSObject, ObservableObject {
         }
     }
 
-    /// The actions on a holding alert that offers selling. Each opens the app's sell
+    /// The actions on a holding alert's notification. Each opens the app's sell
     /// dialog, which asks for the quantity and a confirmation before ordering.
     private static var sellCategory: UNNotificationCategory {
         let actions = OrderType.allCases.map {
@@ -94,14 +94,15 @@ final class AlertNotifier: NSObject, ObservableObject {
 
     /// Posts a notification. `thread` groups an item's notifications together, and
     /// `sellItem` adds the sell actions for that item.
-    func post(title: String, body: String, thread: String, sellItem: UUID? = nil) {
+    func post(title: String, subtitle: String? = nil, body: String, thread: String, sellItem: UUID? = nil) {
         guard let center else {
-            print("[alert] \(title) — \(body)")
+            print("[alert] \(title)\(subtitle.map { " (\($0))" } ?? "") — \(body)")
             fflush(stdout)
             return
         }
         let content = UNMutableNotificationContent()
         content.title = title
+        if let subtitle { content.subtitle = subtitle }
         content.body = body
         content.sound = .default
         content.threadIdentifier = thread

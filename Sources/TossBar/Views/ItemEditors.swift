@@ -441,6 +441,7 @@ struct StockSymbolPane: View {
                 }
                 // A target price belongs to the old stock.
                 store.removePriceAlerts(of: id)
+                env.oneTimeAlerts.removePriceAlerts(of: id)
             } catch {
                 self.error = error.localizedDescription
             }

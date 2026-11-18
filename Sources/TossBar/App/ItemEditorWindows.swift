@@ -14,6 +14,8 @@ enum EditorTarget {
     case item(UUID)
     /// The sell dialog for a stock item's holding, from an alert's notification.
     case sell(SellAction)
+    /// An item's one-time alerts, from its context menu.
+    case oneTimeAlerts(UUID)
 
     var key: String {
         switch self {
@@ -23,12 +25,13 @@ enum EditorTarget {
         case .item(let id): return "item.\(id.uuidString)"
         // One sell dialog per item: a second action brings the open one forward.
         case .sell(let action): return "sell.\(action.itemID.uuidString)"
+        case .oneTimeAlerts(let id): return "oneTimeAlerts.\(id.uuidString)"
         }
     }
 
     var itemID: UUID? {
         switch self {
-        case .item(let id): return id
+        case .item(let id), .oneTimeAlerts(let id): return id
         case .sell(let action): return action.itemID
         default: return nil
         }
@@ -101,6 +104,10 @@ final class ItemEditorWindows: NSObject, NSWindowDelegate {
         case .sell(let action):
             guard env.store.item(action.itemID) != nil else { return nil }
             return makeDialog(title: "매도 주문", SellOrderView(env: env, action: action, close: close))
+        case .oneTimeAlerts(let id):
+            guard let item = env.store.item(id) else { return nil }
+            return makeDialog(title: "일회성 알림 · \(title(for: item))",
+                              OneTimeAlertsView(env: env, itemID: id, close: close))
         case .item(let id):
             guard let item = env.store.item(id) else { return nil }
             let tabs = ToolbarTabController(tabs: settingsTabs(for: item))

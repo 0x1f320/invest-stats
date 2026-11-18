@@ -1,9 +1,5 @@
 import Foundation
 
-private extension PriceAlert {
-    var isAmountOfOneStock: Bool { metric == .price || metric == .holdingProfit }
-}
-
 extension ItemStore {
     func alerts(of id: UUID) -> [PriceAlert] {
         item(id)?.alerts ?? []

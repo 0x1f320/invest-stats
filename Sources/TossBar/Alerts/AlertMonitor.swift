@@ -17,8 +17,9 @@ struct AlertObservation: Equatable {
     var scale: Decimal? = nil
 }
 
-/// Watches every item's alerts. Whenever the data changes, it reads each enabled alert's
-/// value, steps it through `AlertEvaluator`, and posts a notification when it fires.
+/// Watches every item's alerts and the pending one-time alerts. Whenever the data changes,
+/// it reads each enabled alert's value, steps it through `AlertEvaluator`, and posts a
+/// notification when it fires.
 @MainActor
 final class AlertMonitor: ObservableObject {
     nonisolated static let statesKey = "alertStates.v1"
@@ -28,20 +29,23 @@ final class AlertMonitor: ObservableObject {
     @Published private(set) var states: [UUID: AlertState]
 
     private let store: ItemStore
+    private let oneTimeAlerts: OneTimeAlertStore
     private let data: MarketDataHub
     private let notifier: AlertNotifier
     private let defaults: UserDefaults
     private var cancellable: AnyCancellable?
 
-    init(store: ItemStore, data: MarketDataHub, notifier: AlertNotifier, defaults: UserDefaults = .standard) {
+    init(store: ItemStore, oneTimeAlerts: OneTimeAlertStore, data: MarketDataHub, notifier: AlertNotifier,
+         defaults: UserDefaults = .standard) {
         self.store = store
+        self.oneTimeAlerts = oneTimeAlerts
         self.data = data
         self.notifier = notifier
         self.defaults = defaults
         states = Self.loadStates(from: defaults)
 
         // Evaluate after each batch of data or settings changes, like the menu bar redraw.
-        cancellable = Publishers.Merge(data.objectWillChange, store.objectWillChange)
+        cancellable = Publishers.Merge3(data.objectWillChange, store.objectWillChange, oneTimeAlerts.objectWillChange)
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.evaluate() }
     }
@@ -51,41 +55,90 @@ final class AlertMonitor: ObservableObject {
     func evaluate(now: Date = Date()) {
         var next: [UUID: AlertState] = [:]
         var finished: [(alert: UUID, item: UUID)] = []
+        var firedOneTime: Set<UUID> = []
 
         for item in store.items {
             for alert in item.alerts where alert.isEnabled && alert.threshold != nil {
-                let previous = states[alert.id]
-                guard let observation = observation(for: alert, of: item) else {
-                    // No value yet (loading, or the connection is gone): keep waiting.
-                    next[alert.id] = previous
-                    continue
-                }
-                var calendar = Calendar(identifier: .gregorian)
-                calendar.timeZone = observation.timeZone
-                let step = AlertEvaluator.step(
-                    alert,
-                    signature: AlertEvaluator.signature(for: alert, subject: observation.subject),
-                    value: observation.value,
-                    scale: observation.scale,
-                    previous: previous,
-                    now: now,
-                    calendar: calendar
-                )
-                next[alert.id] = step.state
-                guard step.fires else { continue }
-                notify(alert, item: item, observation: observation)
+                let (state, observation) = step(alert, of: item, now: now)
+                next[alert.id] = state
+                guard let observation else { continue }
+                notify(alert, item: item, observation: observation, oneTime: false)
                 if alert.repeatMode == .once { finished.append((alert.id, item.id)) }
             }
+        }
+
+        let items = Dictionary(uniqueKeysWithValues: store.items.map { ($0.id, $0) })
+        for pending in oneTimeAlerts.alerts {
+            // An alert whose item is gone is pruned with the item; skip it meanwhile.
+            guard let item = items[pending.itemID] else { continue }
+            let (state, observation) = step(pending.alert, of: item, now: now)
+            guard let observation else {
+                next[pending.id] = state
+                continue
+            }
+            // Fired: notify once and forget it, state included.
+            notify(pending.alert, item: item, observation: observation, oneTime: true)
+            firedOneTime.insert(pending.id)
         }
 
         if next != states {
             states = next
             saveStates()
         }
-        // "Once" alerts turn themselves off after firing.
+        // "Once" alerts turn themselves off after firing; one-time alerts are deleted.
         for (alertID, itemID) in finished {
             store.updateAlert(alertID, of: itemID) { $0.isEnabled = false }
         }
+        oneTimeAlerts.remove(firedOneTime)
+    }
+
+    /// Advances one alert by the item's current value. Returns its next state, and the
+    /// observation that made it fire, or nil when it doesn't.
+    private func step(_ alert: PriceAlert, of item: MenuItemConfig, now: Date) -> (AlertState?, AlertObservation?) {
+        let previous = states[alert.id]
+        guard let observation = observation(for: alert, of: item) else {
+            // No value yet (loading, or the connection is gone): keep waiting.
+            return (previous, nil)
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = observation.timeZone
+        let step = AlertEvaluator.step(
+            alert,
+            signature: AlertEvaluator.signature(for: alert, subject: observation.subject),
+            value: observation.value,
+            scale: observation.scale,
+            previous: previous,
+            now: now,
+            calendar: calendar
+        )
+        return (step.state, step.fires ? observation : nil)
+    }
+
+    /// Where an alert stands, for its row in the settings or the one-time alerts window:
+    /// the current value and whether it is waiting, met or off.
+    func statusText(of alert: PriceAlert, item: MenuItemConfig) -> String {
+        guard alert.threshold != nil else { return "기준값을 입력하면 확인을 시작합니다." }
+        let observation = observation(for: alert, of: item)
+        let current = observation.map {
+            "현재 " + AlertThreshold.format($0.value, metric: alert.metric, currency: $0.currency)
+        }
+        let state: String
+        if !alert.isEnabled {
+            state = "꺼짐"
+        } else if let observation {
+            if let saved = states[alert.id],
+               saved.signature == AlertEvaluator.signature(for: alert, subject: observation.subject) {
+                switch saved.phase {
+                case .armed: state = "대기 중"
+                case .triggered: state = "조건 충족 중 · 벗어난 뒤 다시 넘으면 알림"
+                }
+            } else {
+                state = "확인 중"
+            }
+        } else {
+            state = alert.metric.isHolding ? "보유 내역을 기다리는 중 · 보유하지 않은 동안에는 알리지 않음" : "시세를 기다리는 중"
+        }
+        return [current, state].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// The alert's current value, or nil while it isn't loaded.
@@ -137,7 +190,7 @@ final class AlertMonitor: ObservableObject {
 
     // MARK: Notification
 
-    private func notify(_ alert: PriceAlert, item: MenuItemConfig, observation: AlertObservation) {
+    private func notify(_ alert: PriceAlert, item: MenuItemConfig, observation: AlertObservation, oneTime: Bool) {
         guard let service = data.service(for: item) else { return }
         let message: AlertMessage
         switch item.kind {
@@ -179,7 +232,8 @@ final class AlertMonitor: ObservableObject {
             // Indicator items have no alert metrics, so nothing of theirs fires.
             return
         }
-        notifier.post(title: message.title, body: message.body, thread: item.id.uuidString,
+        notifier.post(title: message.title, subtitle: oneTime ? AlertMessage.oneTimeSubtitle : nil,
+                      body: message.body, thread: item.id.uuidString,
                       sellItem: alert.sellsFromNotification ? item.id : nil)
     }
 
@@ -206,6 +260,9 @@ final class AlertMonitor: ObservableObject {
 struct AlertMessage: Equatable {
     let title: String
     let body: String
+
+    /// The subtitle of a one-time alert's notification, which says it won't come again.
+    static let oneTimeSubtitle = "일회성 알림 · 알린 뒤 삭제됨"
 
     /// `삼성전자 · 가격 72,000원 이상` / `현재가 72,500원 · 전일 대비 +2.10%`
     static func stock(
