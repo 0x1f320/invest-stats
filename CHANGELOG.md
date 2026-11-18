@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0-dev.6](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.5...v1.2.0-dev.6) (2026-11-18)
+
+### Features
+
+* **alert:** add one-time alerts from an item's context menu ([#48](https://github.com/0x1f320/invest-stats/issues/48)) ([82a3f3a](https://github.com/0x1f320/invest-stats/commit/82a3f3a3aeb3ddf413a80cf2cb7f6b8debb0a80b))
+
 ## [1.2.0-dev.5](https://github.com/0x1f320/invest-stats/compare/v1.2.0-dev.4...v1.2.0-dev.5) (2026-11-17)
 
 ### Features
